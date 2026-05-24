@@ -110,6 +110,23 @@
         'V': 'V(13-1)', 'W': 'W(14-24)', 'Y': 'Y(12-22)', 'N': 'N(11-21)'
     };
     
+    const shiftEndTimes = {
+        '0': 12.0, '1': 25.0, '2': 23.0, '3': 16.0, '4': 32.0, '5': 22.0, '6': 18.0, 
+        '7': 17.0, '8': 20.0, '9': 23.0, 'A': 20.0, 'B': 16.0, 'C': 21.0, 'D': 17.0, 
+        'E': 22.0, 'F': 24.0, 'G': 24.0, 'H': 32.0, 'I': 26.0, 'J': 18.0, 'K': 20.0, 
+        'L': 26.0, 'M': 18.0, 'N': 21.0, 'O': 20.0, 'P': 21.0, 'Q': 23.0, 'R': 27.0, 
+        'S': 19.0, 'T': 19.0, 'U': 20.0, 'V': 25.0, 'W': 24.0, 'X': 26.0, 'Y': 22.0, 
+        'Z': 32.0, '休': 0.0
+    };
+    const shiftStartTimes = {
+        '0': 8.0, '1': 15.0, '2': 11.0, '3': 12.0, '4': 22.0, '5': 14.0, '6': 9.0,  
+        '7': 8.0, '8': 9.0, '9': 15.0, 'A': 8.0, 'B': 8.0, 'C': 9.0, 'D': 9.0, 
+        'E': 10.0, 'F': 12.0, 'G': 16.0, 'H': 20.0, 'I': 16.0, 'J': 8.0, 'K': 12.0, 
+        'L': 14.0, 'M': 10.0, 'N': 11.0, 'O': 8.0, 'P': 13.0, 'Q': 13.0, 'R': 19.0, 
+        'S': 11.0, 'T': 9.0, 'U': 10.0, 'V': 13.0, 'W': 14.0, 'X': 18.0, 'Y': 12.0, 
+        'Z': 24.0, '休': 48.0
+    };
+    
     const shiftDurations = {
         '2': 12, '4': 10, 'A': 12, 'C': 12, 'E': 12, 'F': 12, 'I': 10, 'J': 10, 'O': 12, 'R': 8, 'V': 12, 'W': 10, 'Y': 10, 'N': 10, '休': 0
     };
@@ -130,7 +147,6 @@
     let excelSheetData = null;
     let finalOutputWorkbook = null;
 
-    // --- 上傳事件綁定 ---
     fileUpload.addEventListener('change', handleFileSelect);
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evName => fileDropArea.addEventListener(evName, preventDefaults, false));
     ['dragenter', 'dragover'].forEach(evName => fileDropArea.addEventListener(evName, () => fileDropArea.classList.add('border-indigo-500', 'bg-indigo-50/30'), false));
@@ -187,9 +203,6 @@
 
     runScheduleButton.addEventListener('click', runSchedulingEngine);
 
-    // =================================================================
-    // 核心優化演算法：智慧發牌與貪婪約束 (JavaScript 版)
-    // =================================================================
     function runSchedulingEngine() {
         if (!excelSheetData) return;
         
@@ -199,7 +212,7 @@
         spinner.classList.remove('hidden');
         
         resultContainer.classList.remove('hidden');
-        statsDisplay.textContent = "正在執行排班運算，請稍候...";
+        statsDisplay.textContent = "正在執行全局最大匹配與排班運算，請稍候...";
         
         setTimeout(() => {
             try {
@@ -238,7 +251,6 @@
                     }
                 }
 
-                // 3. 初始化排班網格
                 const scheduleGrid = Array(numPersonnel).fill(null).map(() => Array(numDays).fill('休'));
                 
                 for (let p = 0; p < numPersonnel; p++) {
@@ -253,9 +265,9 @@
                     }
                 }
 
-                // 每日黃金陣容 21 人配置
+                // 每日黃金陣容 21 人配置 (O班已抽出全局運算)
                 const dailyQuota = {
-                    'A': 3, 'J': 2, 'O': 1, 'C': 1, 'E': 3, 'Y': 2, 'W': 1, 'F': 2, '2': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2
+                    'A': 3, 'J': 2, 'C': 1, 'E': 3, 'Y': 2, 'W': 1, 'F': 2, '2': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2
                 };
 
                 // 4.1 鋪設特殊長輪轉骨牌 (44RW, IV)
@@ -322,7 +334,108 @@
                     }
                 }
 
-                // 4.2 智慧發牌與常規填補
+                // 🌟 4.1.5 O班全局均分發牌 (二分圖最大匹配 Bipartite Matching)
+                let availableO = [];
+                let hasO = new Array(numPersonnel).fill(0);
+                
+                for (let d = 0; d < numDays; d++) {
+                    availableO[d] = [];
+                    for (let p = 0; p < numPersonnel; p++) {
+                        if (kitchenIndices.includes(p)) continue;
+                        
+                        if (scheduleGrid[p][d] === 'O') hasO[p]++;
+                        if (scheduleGrid[p][d] !== null) continue; // 當日已有班或休假
+                        
+                        let canTake = true;
+                        // 確保昨天 11 小時休息
+                        if (d > 0 && scheduleGrid[p][d-1] !== null && scheduleGrid[p][d-1] !== '休') {
+                            let prevShift = scheduleGrid[p][d-1];
+                            if (shiftEndTimes[prevShift] !== undefined && shiftEndTimes[prevShift] > 21.0) canTake = false;
+                        }
+                        // 確保明天 11 小時休息
+                        if (d < numDays - 1 && scheduleGrid[p][d+1] !== null && scheduleGrid[p][d+1] !== '休') {
+                            let nextShift = scheduleGrid[p][d+1];
+                            if (shiftStartTimes[nextShift] !== undefined && 31.0 > shiftStartTimes[nextShift] + 24.0) canTake = false;
+                        }
+                        
+                        if (canTake) availableO[d].push(p);
+                    }
+                }
+
+                let matchDayToPersonO = new Array(numDays).fill(-1);
+                let matchPersonToDayO = new Array(numPersonnel).fill(-1);
+
+                // 鎖定人工預填的 O 班，避免重複發放
+                for (let d = 0; d < numDays; d++) {
+                    for (let p = 0; p < numPersonnel; p++) {
+                        if (scheduleGrid[p][d] === 'O') {
+                            matchDayToPersonO[d] = p;
+                            matchPersonToDayO[p] = d;
+                        }
+                    }
+                }
+
+                // Bipartite Matching 尋找完美組合
+                function bpmO(d, visited) {
+                    for (let p of availableO[d]) {
+                        if (hasO[p] > 0) continue; // 絕對優先發給0次的人
+                        if (!visited[p]) {
+                            visited[p] = true;
+                            if (matchPersonToDayO[p] === -1 || bpmO(matchPersonToDayO[p], visited)) {
+                                matchPersonToDayO[p] = d;
+                                matchDayToPersonO[d] = p;
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                }
+
+                for (let d = 0; d < numDays; d++) {
+                    if (matchDayToPersonO[d] === -1) {
+                        let visited = new Array(numPersonnel).fill(false);
+                        bpmO(d, visited);
+                    }
+                }
+
+                // 寫回結果，如果真的找不到 0 次的人，才發給 1 次的人 (絕對防禦第 3 次)
+                for (let d = 0; d < numDays; d++) {
+                    if (matchDayToPersonO[d] !== -1) {
+                        scheduleGrid[matchDayToPersonO[d]][d] = 'O';
+                        hasO[matchDayToPersonO[d]] = 1;
+                    } else {
+                        let bestP = -1;
+                        let minO = 999;
+                        for (let p = 0; p < numPersonnel; p++) {
+                            if (kitchenIndices.includes(p) || scheduleGrid[p][d] !== null) continue;
+                            
+                            let canTake = true;
+                            if (d > 0 && scheduleGrid[p][d-1] !== null && scheduleGrid[p][d-1] !== '休') {
+                                if (shiftEndTimes[scheduleGrid[p][d-1]] > 21.0) canTake = false;
+                            }
+                            if (d < numDays - 1 && scheduleGrid[p][d+1] !== null && scheduleGrid[p][d+1] !== '休') {
+                                if (31.0 > shiftStartTimes[scheduleGrid[p][d+1]] + 24.0) canTake = false;
+                            }
+                            if (!canTake) continue;
+
+                            let currentO = 0;
+                            for(let t=0; t<numDays; t++) if(scheduleGrid[p][t] === 'O') currentO++;
+                            
+                            if (currentO >= 2) continue; // 絕不允許第3次
+
+                            if (currentO < minO) {
+                                minO = currentO;
+                                bestP = p;
+                            }
+                        }
+                        if (bestP !== -1) {
+                            scheduleGrid[bestP][d] = 'O';
+                            hasO[bestP]++;
+                        }
+                    }
+                }
+
+                // 4.2 剩餘常規網格隨機局部搜尋與填補 (附帶11小時休息檢查)
                 for (let d = 0; d < numDays; d++) {
                     const currentCounts = {};
                     Object.keys(dailyQuota).forEach(k => currentCounts[k] = 0);
@@ -340,40 +453,9 @@
 
                     pool.sort(() => Math.random() - 0.5);
 
-                    // 🌟 獨立抽出 O 班進行「均分發牌」處理
-                    if (pool.includes('O')) {
-                        let bestP_for_O = -1;
-                        let min_O_count = 999;
-                        
-                        // 尋找最適合（O班拿最少）的人
-                        for (let p = 0; p < numPersonnel; p++) {
-                            if (kitchenIndices.includes(p) || scheduleGrid[p][d] !== null) continue;
-                            
-                            // 計算此人目前拿了幾個 O
-                            let current_O = 0;
-                            for (let t = 0; t < numDays; t++) { if (scheduleGrid[p][t] === 'O') current_O++; }
-                            
-                            // 絕對上限：絕不發第 3 次
-                            if (current_O >= 2) continue;
-                            
-                            // 檢查 11 小時休息與連班限制
-                            if (d >= 2 && scheduleGrid[p][d-1] === 'O' && scheduleGrid[p][d-2] === 'O') continue;
-
-                            if (current_O < min_O_count) {
-                                min_O_count = current_O;
-                                bestP_for_O = p;
-                            }
-                        }
-                        
-                        if (bestP_for_O !== -1) {
-                            scheduleGrid[bestP_for_O][d] = 'O';
-                            pool.splice(pool.indexOf('O'), 1);
-                        }
-                    }
-
-                    // 填補其餘常規班別
                     for (let p = 0; p < numPersonnel; p++) {
-                        if (kitchenIndices.includes(p) || scheduleGrid[p][d] !== null) continue;
+                        if (kitchenIndices.includes(p)) continue;
+                        if (scheduleGrid[p][d] !== null) continue; 
 
                         if (pool.length > 0) {
                             let assigned = false;
@@ -390,6 +472,22 @@
                                 if (d >= 1 && scheduleGrid[p][d-1] === 'N') {
                                     if (!['A', 'J', 'O', '休'].includes(targetShift)) continue;
                                 }
+
+                                // 11 小時休息檢查
+                                let canTakeGreedy = true;
+                                if (d > 0 && scheduleGrid[p][d-1] !== null && scheduleGrid[p][d-1] !== '休') {
+                                    let prevShift = scheduleGrid[p][d-1];
+                                    if (shiftEndTimes[prevShift] && shiftStartTimes[targetShift]) {
+                                        if (shiftEndTimes[prevShift] + 11.0 > shiftStartTimes[targetShift] + 24.0) canTakeGreedy = false;
+                                    }
+                                }
+                                if (d < numDays - 1 && scheduleGrid[p][d+1] !== null && scheduleGrid[p][d+1] !== '休') {
+                                    let nextShift = scheduleGrid[p][d+1];
+                                    if (shiftEndTimes[targetShift] && shiftStartTimes[nextShift]) {
+                                        if (shiftEndTimes[targetShift] + 11.0 > shiftStartTimes[nextShift] + 24.0) canTakeGreedy = false;
+                                    }
+                                }
+                                if (!canTakeGreedy) continue;
 
                                 scheduleGrid[p][d] = targetShift;
                                 pool.splice(i, 1);
