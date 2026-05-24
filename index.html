@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>排班優化系統</title>
+    
+    <style>
+        html { 
+            visibility: hidden; 
+            opacity: 0; 
+            transition: opacity 0.3s ease; 
+        }
+        html.tailwind-loaded { 
+            visibility: visible; 
+            opacity: 1; 
+        }
+        body {
+            font-family: 'Inter', 'Microsoft JhengHei', sans-serif;
+        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                document.documentElement.classList.add('tailwind-loaded');
+            }, 100); 
+        });
+    </script>
+</head>
+<body class="bg-slate-100 text-slate-800 flex items-center justify-center min-h-screen p-4 md:p-8">
+
+    <div class="w-full max-w-5xl bg-white rounded-2xl shadow-xl border border-slate-200 p-6 md:p-10 space-y-8">
+        <header class="text-center space-y-2 border-b border-slate-100 pb-6">
+            <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">排班優化系統</h1>
+        </header>
+
+        <main class="space-y-8">
+            <div class="bg-slate-50 rounded-xl p-5 border border-slate-200/80 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-700 mb-2">當前套用排班（21人）</h3>
+                    <ul class="text-xs text-slate-500 space-y-1 list-disc pl-4">
+                        <li>早班：A班 (3人)、J班 (2人)、O班 (1人)、C班 (1人)</li>
+                        <li>中晚班：E班 (3人)、Y班 (2人)、F班 (2人)</li>
+                        <li>44RW (每日各1)、IV (每日各1)、2班 (1人)</li>
+                    </ul>
+                </div>
+                <div class="flex flex-col justify-center space-y-4 md:border-l md:border-slate-200 md:pl-6">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-bold text-slate-700">時間標籤顯示開關</span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="include-time" class="sr-only peer" checked>
+                            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+                    <p class="text-xs text-slate-400">啟用時輸出格式為 4(22-8)；關閉時僅輸出代號 4。自動統計與加班時數將同步連動。</p>
+                </div>
+            </div>
+
+            <div id="file-drop-area" class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center transition-all duration-300 bg-white hover:border-indigo-500 hover:bg-indigo-50/30 group cursor-pointer relative">
+                <label for="file-upload" class="cursor-pointer block w-full h-full">
+                    <svg class="mx-auto h-12 w-12 text-slate-400 group-hover:text-indigo-500 transition-colors" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span class="mt-3 block text-base font-semibold text-slate-800">點擊選擇 或 將排班原始檔案 (Excel) 拖曳至此</span>
+                    <p id="file-name" class="mt-2 text-sm text-slate-400 italic">尚未載入外部假卡與底標文件</p>
+                </label>
+                <input id="file-upload" name="file-upload" type="file" class="sr-only" accept=".xlsx, .xlsm, .xls">
+            </div>
+
+            <div id="controls-container" class="space-y-4 hidden text-center">
+                <button id="run-schedule-button" class="w-full md:w-2/3 mx-auto bg-indigo-600 text-white font-bold py-3.5 px-6 rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all flex items-center justify-center space-x-3 text-lg">
+                    <div class="spinner h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin hidden"></div>
+                    <span>開始執行自動排班</span>
+                </button>
+            </div>
+
+            <div id="result-container" class="space-y-3 hidden">
+                <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+                    <h3 class="text-base font-bold text-slate-800 flex items-center space-x-2">
+                        <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                        <span>每日班別統計：</span>
+                    </h3>
+                    <div class="flex space-x-3">
+                        <button id="download-button" class="hidden text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg shadow transition-colors flex items-center space-x-1">
+                            <span>下載 Excel 結果</span>
+                        </button>
+                        <button id="clear-button" class="text-sm text-slate-500 hover:text-rose-500 font-medium transition-colors">清除狀態</button>
+                    </div>
+                </div>
+                <div id="stats-display" class="w-full h-64 bg-slate-50 text-slate-700 text-sm rounded-xl p-5 border border-slate-200 shadow-inner overflow-y-auto font-mono whitespace-pre-wrap leading-relaxed"></div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+    // --- 基礎參數與常數定義 ---
+    const dutyCodes = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+    
+    const shiftLabels = {
+        '2': '2(11-23)', '4': '4(22-8)', 'A': 'A(8-20)', 'C': 'C(9-21)', 'E': 'E(10-22)',
+        'F': 'F(12-24)', 'I': 'I(16-2)', 'J': 'J(8-18)', 'O': 'O(8-20)', 'R': 'R(19-3)',
+        'V': 'V(13-1)', 'W': 'W(14-24)', 'Y': 'Y(12-22)', 'N': 'N(11-21)'
+    };
+    
+    const shiftDurations = {
+        '2': 12, '4': 10, 'A': 12, 'C': 12, 'E': 12, 'F': 12, 'I': 10, 'J': 10, 'O': 12, 'R': 8, 'V': 12, 'W': 10, 'Y': 10, 'N': 10, '休': 0
+    };
+
+    // --- DOM 元素控制 ---
+    const fileUpload = document.getElementById('file-upload');
+    const fileNameDisplay = document.getElementById('file-name');
+    const fileDropArea = document.getElementById('file-drop-area');
+    const controlsContainer = document.getElementById('controls-container');
+    const runScheduleButton = document.getElementById('run-schedule-button');
+    const resultContainer = document.getElementById('result-container');
+    const statsDisplay = document.getElementById('stats-display');
+    const clearButton = document.getElementById('clear-button');
+    const downloadButton = document.getElementById('download-button');
+    const includeTimeCheckbox = document.getElementById('include-time');
+
+    let rawWorkbook = null;
+    let excelSheetData = null;
+    let finalOutputWorkbook = null;
+
+    // --- 上傳事件綁定 ---
+    fileUpload.addEventListener('change', handleFileSelect);
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evName => fileDropArea.addEventListener(evName, preventDefaults, false));
+    ['dragenter', 'dragover'].forEach(evName => fileDropArea.addEventListener(evName, () => fileDropArea.classList.add('border-indigo-500', 'bg-indigo-50/30'), false));
+    ['dragleave', 'drop'].forEach(evName => fileDropArea.addEventListener(evName, () => fileDropArea.classList.remove('border-indigo-500', 'bg-indigo-50/30'), false));
+    fileDropArea.addEventListener('drop', handleDrop, false);
+
+    function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+
+    function handleDrop(e) {
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileUpload.files = files;
+            handleFileSelect({ target: fileUpload });
+        }
+    }
+
+    function handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (file) {
+            fileNameDisplay.textContent = `已載入檔案: ${file.name}`;
+            fileNameDisplay.classList.replace('text-slate-400', 'text-indigo-600');
+            controlsContainer.classList.remove('hidden');
+            resultContainer.classList.add('hidden');
+            downloadButton.classList.add('hidden');
+            statsDisplay.textContent = '';
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    rawWorkbook = XLSX.read(data, { type: 'array', cellStyles: true, cellDates: true });
+                    const firstSheetName = rawWorkbook.SheetNames[0];
+                    const worksheet = rawWorkbook.Sheets[firstSheetName];
+                    excelSheetData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+                } catch (err) {
+                    alert(`檔案讀取錯誤: ${err.message}`);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    }
+
+    clearButton.addEventListener('click', () => {
+        fileUpload.value = '';
+        fileNameDisplay.textContent = '尚未載入外部假卡與底標文件';
+        fileNameDisplay.classList.replace('text-indigo-600', 'text-slate-400');
+        controlsContainer.classList.add('hidden');
+        resultContainer.classList.add('hidden');
+        downloadButton.classList.add('hidden');
+        statsDisplay.textContent = '';
+        rawWorkbook = null;
+        excelSheetData = null;
+    });
+
+    runScheduleButton.addEventListener('click', runSchedulingEngine);
+
+    // =================================================================
+    // 核心優化演算法：智慧發牌與貪婪約束 (JavaScript 版)
+    // =================================================================
+    function runSchedulingEngine() {
+        if (!excelSheetData) return;
+        
+        const includeTime = includeTimeCheckbox.checked;
+        const spinner = runScheduleButton.querySelector('.spinner');
+        runScheduleButton.disabled = true;
+        spinner.classList.remove('hidden');
+        
+        resultContainer.classList.remove('hidden');
+        statsDisplay.textContent = "⏳ 正在執行高強度智慧排班運算 (含 O 班均分發牌演算法)，請稍候...";
+        
+        setTimeout(() => {
+            try {
+                // 1. 定義日期與人員邊界
+                const headerRow = excelSheetData[0];
+                const dateCols = [];
+                for (let c = 0; c < headerRow.length; c++) {
+                    if (String(headerRow[c]).includes('號')) dateCols.push(c);
+                }
+                const numDays = dateCols.length;
+                const startRow = 2; 
+                const numPersonnel = excelSheetData.length - startRow;
+
+                // 2. 解析組別與人工假單
+                const baoYiIndices = [];
+                const kitchenIndices = [];
+                const preFilledData = {}; 
+
+                for (let p = 0; p < numPersonnel; p++) {
+                    const rIdx = startRow + p;
+                    const groupName = String(excelSheetData[rIdx][0] || "");
+
+                    if (groupName.includes("保一")) baoYiIndices.push(p);
+                    if (groupName.includes("廚房")) kitchenIndices.push(p);
+
+                    for (let d = 0; d < numDays; d++) {
+                        const cellVal = String(excelSheetData[rIdx][dateCols[d]] || "").trim();
+                        if (cellVal === "" || cellVal === "nan") continue;
+                        
+                        const charHead = cellVal[0].toUpperCase();
+                        if (shiftDurations.hasOwnProperty(charHead)) {
+                            preFilledData[`${p}_${d}`] = charHead;
+                        } else {
+                            preFilledData[`${p}_${d}`] = '休'; 
+                        }
+                    }
+                }
+
+                // 3. 初始化排班網格
+                const scheduleGrid = Array(numPersonnel).fill(null).map(() => Array(numDays).fill('休'));
+                
+                for (let p = 0; p < numPersonnel; p++) {
+                    for (let d = 0; d < numDays; d++) {
+                        if (preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                            scheduleGrid[p][d] = preFilledData[`${p}_${d}`];
+                        } else if (kitchenIndices.includes(p)) {
+                            scheduleGrid[p][d] = '休'; 
+                        } else {
+                            scheduleGrid[p][d] = null; 
+                        }
+                    }
+                }
+
+                // 每日黃金陣容 21 人配置
+                const dailyQuota = {
+                    'A': 3, 'J': 2, 'O': 1, 'C': 1, 'E': 3, 'Y': 2, 'W': 1, 'F': 2, '2': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2
+                };
+
+                // 4.1 鋪設特殊長輪轉骨牌 (44RW, IV)
+                for (let d = 0; d < numDays; d++) {
+                    // 44RW
+                    let p4 = -1;
+                    for (let p = 0; p < numPersonnel; p++) {
+                        if (kitchenIndices.includes(p)) continue;
+                        if (p4 !== -1) break;
+                        
+                        let pathClear = true;
+                        const block = ['4', '4', 'R', 'W', '休'];
+                        for (let step = 0; step < 5; step++) {
+                            const targetDay = d + step;
+                            if (targetDay >= numDays) break; 
+                            if (scheduleGrid[p][targetDay] !== null && scheduleGrid[p][targetDay] !== block[step]) {
+                                pathClear = false; break;
+                            }
+                        }
+                        
+                        let has4 = false;
+                        for (let t = 0; t < numDays; t++) { if (scheduleGrid[p][t] === '4') has4 = true; }
+
+                        if (pathClear && !has4) {
+                            if (baoYiIndices.length > 0 && !baoYiIndices.includes(p) && d % 3 === 0) continue;
+                            p4 = p;
+                        }
+                    }
+
+                    if (p4 !== -1) {
+                        const block = ['4', '4', 'R', 'W', '休'];
+                        for (let step = 0; step < 5; step++) {
+                            if (d + step < numDays) scheduleGrid[p4][d + step] = block[step];
+                        }
+                    }
+
+                    // IV
+                    let pI = -1;
+                    for (let p = 0; p < numPersonnel; p++) {
+                        if (kitchenIndices.includes(p)) continue;
+                        if (pI !== -1) break;
+
+                        let pathClear = true;
+                        const block = ['I', 'V', '休'];
+                        for (let step = 0; step < 3; step++) {
+                            if (d + step < numDays) {
+                                if (scheduleGrid[p][d + step] !== null && scheduleGrid[p][d + step] !== block[step]) {
+                                    pathClear = false; break;
+                                }
+                            }
+                        }
+                        let hasI = false;
+                        for (let t = 0; t < numDays; t++) { if (scheduleGrid[p][t] === 'I') hasI = true; }
+
+                        if (d >= 2 && scheduleGrid[p][d - 2] === 'W') pathClear = false;
+                        if (pathClear && !hasI) pI = p;
+                    }
+
+                    if (pI !== -1) {
+                        const block = ['I', 'V', '休'];
+                        for (let step = 0; step < 3; step++) {
+                            if (d + step < numDays) scheduleGrid[pI][d + step] = block[step];
+                        }
+                    }
+                }
+
+                // 4.2 智慧發牌與常規填補
+                for (let d = 0; d < numDays; d++) {
+                    const currentCounts = {};
+                    Object.keys(dailyQuota).forEach(k => currentCounts[k] = 0);
+                    for (let p = 0; p < numPersonnel; p++) {
+                        if (scheduleGrid[p][d] && currentCounts.hasOwnProperty(scheduleGrid[p][d])) {
+                            currentCounts[scheduleGrid[p][d]]++;
+                        }
+                    }
+
+                    const pool = [];
+                    Object.keys(dailyQuota).forEach(s => {
+                        const shortfall = dailyQuota[s] - currentCounts[s];
+                        for (let i = 0; i < shortfall; i++) pool.push(s);
+                    });
+
+                    pool.sort(() => Math.random() - 0.5);
+
+                    // 🌟 獨立抽出 O 班進行「均分發牌」處理
+                    if (pool.includes('O')) {
+                        let bestP_for_O = -1;
+                        let min_O_count = 999;
+                        
+                        // 尋找最適合（O班拿最少）的人
+                        for (let p = 0; p < numPersonnel; p++) {
+                            if (kitchenIndices.includes(p) || scheduleGrid[p][d] !== null) continue;
+                            
+                            // 計算此人目前拿了幾個 O
+                            let current_O = 0;
+                            for (let t = 0; t < numDays; t++) { if (scheduleGrid[p][t] === 'O') current_O++; }
+                            
+                            // 絕對上限：絕不發第 3 次
+                            if (current_O >= 2) continue;
+                            
+                            // 檢查 11 小時休息與連班限制
+                            if (d >= 2 && scheduleGrid[p][d-1] === 'O' && scheduleGrid[p][d-2] === 'O') continue;
+
+                            if (current_O < min_O_count) {
+                                min_O_count = current_O;
+                                bestP_for_O = p;
+                            }
+                        }
+                        
+                        if (bestP_for_O !== -1) {
+                            scheduleGrid[bestP_for_O][d] = 'O';
+                            pool.splice(pool.indexOf('O'), 1);
+                        }
+                    }
+
+                    // 填補其餘常規班別
+                    for (let p = 0; p < numPersonnel; p++) {
+                        if (kitchenIndices.includes(p) || scheduleGrid[p][d] !== null) continue;
+
+                        if (pool.length > 0) {
+                            let assigned = false;
+                            for (let i = 0; i < pool.length; i++) {
+                                const targetShift = pool[i];
+                                
+                                let mCount = 0;
+                                for (let t = 0; t < numDays; t++) { if (scheduleGrid[p][t] === targetShift) mCount++; }
+                                if (mCount >= 6) continue;
+
+                                if (d >= 2 && scheduleGrid[p][d-1] === targetShift && scheduleGrid[p][d-2] === targetShift) continue;
+
+                                // N班變速條件連鎖
+                                if (d >= 1 && scheduleGrid[p][d-1] === 'N') {
+                                    if (!['A', 'J', 'O', '休'].includes(targetShift)) continue;
+                                }
+
+                                scheduleGrid[p][d] = targetShift;
+                                pool.splice(i, 1);
+                                assigned = true;
+                                break;
+                            }
+                            if (!assigned) scheduleGrid[p][d] = '休';
+                        } else {
+                            scheduleGrid[p][d] = '休';
+                        }
+                    }
+                }
+
+                // 4.3 J班連休與時數平衡微調
+                for (let p = 0; p < numPersonnel; p++) {
+                    if (kitchenIndices.includes(p)) continue;
+                    let totalLeaves = 0;
+                    for (let d = 0; d < numDays; d++) { if (scheduleGrid[p][d] === '休') totalLeaves++; }
+                    if (totalLeaves > 9) {
+                        let diff = totalLeaves - 9;
+                        for (let d = 0; d < numDays; d++) {
+                            if (diff <= 0) break;
+                            if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                scheduleGrid[p][d] = 'A'; 
+                                diff--;
+                            }
+                        }
+                    }
+                }
+
+                // 5. 輸出整合
+                const dfOut = JSON.parse(JSON.stringify(excelSheetData));
+                const otColIdx = dfOut[0].length;
+                dfOut[0][otColIdx] = "當月加班時數";
+                dfOut[1][otColIdx] = "總計";
+
+                for (let p = 0; p < numPersonnel; p++) {
+                    const rIdx = startRow + p;
+                    let totalOt = 0;
+
+                    for (let d = 0; d < numDays; d++) {
+                        const cIdx = dateCols[d];
+                        const s = scheduleGrid[p][d];
+
+                        if (!kitchenIndices.includes(p)) {
+                            if (s === '休') {
+                                dfOut[rIdx][cIdx] = '輪休';
+                            } else {
+                                dfOut[rIdx][cIdx] = includeTime ? (shiftLabels[s] || s) : s;
+                            }
+                        }
+
+                        const finalShift = kitchenIndices.includes(p) ? (preFilledData[`${p}_${d}`] || '休') : s;
+                        if (finalShift !== '休') {
+                            const duration = shiftDurations[finalShift] || 0;
+                            if (duration > 8) totalOt += (duration - 8);
+                        }
+                    }
+                    dfOut[rIdx][otColIdx] = String(totalOt);
+                }
+
+                // 產生每日統計面板
+                const summaryRowIdx = dfOut.length;
+                dfOut[summaryRowIdx] = Array(dfOut[0].length).fill("");
+                dfOut[summaryRowIdx][0] = "每日班別統計";
+                dfOut[summaryRowIdx][1] = "各班人數";
+
+                let statsOutputText = "以下為 Excel 底部【每日班別統計】與 21 人陣容預覽：\n\n";
+
+                for (let d = 0; d < numDays; d++) {
+                    const cIdx = dateCols[d];
+                    const dateHeader = String(excelSheetData[0][cIdx] || `第 ${d+1} 天`);
+                    const dailyCounts = {};
+
+                    for (let p = 0; p < numPersonnel; p++) {
+                        const rIdx = startRow + p;
+                        let val = String(dfOut[rIdx][cIdx] || "");
+                        val = val.trim();
+                        
+                        const isLeave = ['休', '假', 'nan', '輪休', '慰休', '公差'].some(k => val.includes(k));
+                        if (!isLeave && val !== "" && val !== "undefined") {
+                            const baseCode = val[0].toUpperCase();
+                            if (dutyCodes.includes(baseCode)) {
+                                dailyCounts[baseCode] = (dailyCounts[baseCode] || 0) + 1;
+                            }
+                        }
+                    }
+
+                    const summaryList = [];
+                    Object.keys(dailyCounts).sort().forEach(baseCode => {
+                        const disp = includeTime ? (shiftLabels[baseCode] || baseCode) : baseCode;
+                        summaryList.push(`${disp}: ${dailyCounts[baseCode]}`);
+                    });
+                    
+                    dfOut[summaryRowIdx][cIdx] = summaryList.join("\n");
+                    statsOutputText += `【${dateHeader}】 ${summaryList.join('、 ')}\n`;
+                }
+
+                statsDisplay.textContent = statsOutputText;
+
+                // 產生 Excel 檔案
+                const newWorksheet = XLSX.utils.aoa_to_sheet(dfOut);
+                finalOutputWorkbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(finalOutputWorkbook, newWorksheet, rawWorkbook.SheetNames[0]);
+
+                downloadButton.classList.remove('hidden');
+
+            } catch (error) {
+                console.error(error);
+                statsDisplay.textContent = `發生錯誤：\n${error.stack || error.message}`;
+            } finally {
+                runScheduleButton.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        }, 300); 
+    }
+
+    downloadButton.addEventListener('click', () => {
+        if (!finalOutputWorkbook) return;
+        XLSX.writeFile(finalOutputWorkbook, '排班結果.xlsx');
+    });
+    </script>
+</body>
+</html>
