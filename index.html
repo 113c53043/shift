@@ -70,7 +70,7 @@
                         <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
                     <span class="mt-3 block text-base font-semibold text-slate-800">點擊選擇 或 將排班原始檔案 (Excel) 拖曳至此</span>
-                    <p id="file-name" class="mt-2 text-sm text-slate-400 italic">尚未載入外部假卡與底標文件</p>
+                    <p id="file-name" class="mt-2 text-sm text-slate-400 italic">尚未載入檔案</p>
                 </label>
                 <input id="file-upload" name="file-upload" type="file" class="sr-only" accept=".xlsx, .xlsm, .xls">
             </div>
@@ -175,7 +175,7 @@
 
     clearButton.addEventListener('click', () => {
         fileUpload.value = '';
-        fileNameDisplay.textContent = '尚未載入外部假卡與底標文件';
+        fileNameDisplay.textContent = '尚未載入檔案';
         fileNameDisplay.classList.replace('text-indigo-600', 'text-slate-400');
         controlsContainer.classList.add('hidden');
         resultContainer.classList.add('hidden');
@@ -199,7 +199,7 @@
         spinner.classList.remove('hidden');
         
         resultContainer.classList.remove('hidden');
-        statsDisplay.textContent = "⏳ 正在執行高強度智慧排班運算 (含 O 班均分發牌演算法)，請稍候...";
+        statsDisplay.textContent = "正在執行排班運算，請稍候...";
         
         setTimeout(() => {
             try {
