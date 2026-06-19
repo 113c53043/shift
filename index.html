@@ -44,17 +44,20 @@
 
         <main class="space-y-8">
             <div class="bg-slate-50 rounded-xl p-5 border border-slate-200/80 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 左側：班別規則說明 -->
                 <div>
                     <h3 class="text-sm font-semibold text-slate-700 mb-2">當前套用排班</h3>
                     <ul class="text-xs text-slate-500 space-y-1 list-disc pl-4">
-                        <li>A、E班：單日最少 3 人</span></li>
-                        <li>J、Y班：單日最少 2 人</span></li>
-                        <li>F班：單日最少 3 人</span></li>
+                        <li>AOJ ：單日 5 人 (每種至少 1 人)</span></li>
+                        <li>EY ：單日 5 人 (每種至少 1 人)</span></li>
+                        <li>F = 2人、W班=1人、2班=1人</span></li>
                         <li>N班：單日最高 2 人</li>
                     </ul>
                 </div>
                 
+                <!-- 右側：使用者互動設定 -->
                 <div class="flex flex-col justify-center space-y-5 md:border-l md:border-slate-200 md:pl-6">
+                    <!-- 開關設定 -->
                     <div class="flex items-center justify-between">
                         <span class="text-sm font-bold text-slate-700">時間標籤顯示開關</span>
                         <label class="relative inline-flex items-center cursor-pointer">
@@ -64,27 +67,28 @@
                     </div>
                     <p class="text-xs text-slate-400">開啟顯示 4(22-8)，關閉顯示 4（統計與時數將自動連動）。</p>
                     
+                    <!-- 進階自訂參數區 -->
                     <div class="pt-3 border-t border-slate-200 space-y-4">
+                        <!-- 1. 標靶加班時數 -->
                         <div>
                             <h4 class="text-sm font-bold text-slate-700 mb-2 flex items-center">
                                 <svg class="w-4 h-4 mr-1 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                 目標加班時數 <span class="text-xs font-normal text-slate-400 ml-1">(留白代表無限制)</span>
                             </h4>
                             <div class="flex items-center space-x-2 text-sm text-slate-600">
-                                <input type="number" id="ot-min" placeholder="無" value="56" class="w-16 px-2 py-1 border border-slate-300 rounded-md text-center focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-semibold text-indigo-700 bg-white shadow-sm placeholder:text-slate-300 placeholder:font-normal">
+                                <input type="number" id="ot-min" placeholder="無" value="54" class="w-16 px-2 py-1 border border-slate-300 rounded-md text-center focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-semibold text-indigo-700 bg-white shadow-sm placeholder:text-slate-300 placeholder:font-normal">
                                 <span>~</span>
-                                <input type="number" id="ot-max" placeholder="無" value="58" class="w-16 px-2 py-1 border border-slate-300 rounded-md text-center focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-semibold text-indigo-700 bg-white shadow-sm placeholder:text-slate-300 placeholder:font-normal">
+                                <input type="number" id="ot-max" placeholder="無" value="56" class="w-16 px-2 py-1 border border-slate-300 rounded-md text-center focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-semibold text-indigo-700 bg-white shadow-sm placeholder:text-slate-300 placeholder:font-normal">
                                 <span>小時</span>
                             </div>
-                            <p class="text-xs text-rose-500 font-medium mt-2 bg-rose-50 p-1.5 rounded inline-block border border-rose-100">
-                                若要求「xx小時以上 」，請將右側數字留白。
-                            </p>
+                           
                         </div>
                         
+                        <!-- 2. 休假上限天數 -->
                         <div>
                             <h4 class="text-sm font-bold text-slate-700 mb-2 flex items-center">
                                 <svg class="w-4 h-4 mr-1 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                每人休假上限
+                                每人休假絕對上限
                             </h4>
                             <div class="flex items-center space-x-2 text-sm text-slate-600">
                                 <input type="number" id="max-leaves" value="9" class="w-16 px-2 py-1 border border-slate-300 rounded-md text-center focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-semibold text-emerald-700 bg-white shadow-sm">
@@ -162,17 +166,18 @@
         '2': 12, '4': 10, 'A': 12, 'C': 12, 'E': 12, 'F': 12, 'I': 10, 'J': 10, 'O': 12, 'R': 8, 'V': 12, 'W': 10, 'Y': 10, 'N': 10, '休': 0
     };
 
-    // 🌟 1. 定義單日班別底線 (保障最少人力) - 注意 F 班已改為 3
+    // 🌟 1. 定義單日班別底線 (AOJ=5, EY=5, F=2, W=1, 2=1)
     const dailyQuota = {
-        'A': 3, 'J': 2, 'C': 1, 'E': 3, 'Y': 2, 'W': 1, 'F': 3, '2': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2, 'O': 1, 'N': 0
+        'A': 2, 'J': 2, 'O': 1, // AOJ = 5
+        'E': 3, 'Y': 2,         // EY = 5
+        'F': 2, 'W': 1, '2': 1, 
+        'C': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2, 'N': 0
     };
 
-    // 🌟 2. 定義單日班別容載上限 (限制最多擴充人數) - 注意 F 班已改為 4
+    // 🌟 2. 定義單日班別容載上限 (限制最多擴充人數)
     const maxDailyCapacity = {
-        'N': 2, 'C': 1, 'O': 1, 'W': 1, '2': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2,
-        'F': 4, // 基準3，最多+1
-        'A': 5, 'E': 5, // 基準3，最多+2
-        'J': 4, 'Y': 4  // 基準2，最多+2
+        'N': 2, 'C': 1, 'O': 2, 'W': 1, '2': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2,
+        'F': 4, 'A': 5, 'E': 5, 'J': 4, 'Y': 4 
     };
 
     // --- DOM 元素控制 ---
@@ -274,7 +279,7 @@
         spinner.classList.remove('hidden');
         
         resultContainer.classList.remove('hidden');
-        statsDisplay.textContent = `正在執行全局最大匹配與排班運算\n(目標加班：${otTargetText} | 休假鐵律：不大於 ${targetMaxLeaves} 天)\n請稍候...`;
+        statsDisplay.textContent = `正在執行全局劫富濟貧平準化運算\n(目標加班：${otTargetText} | 休假鐵律：不大於 ${targetMaxLeaves} 天)\n請稍候...`;
         
         setTimeout(() => {
             try {
@@ -522,7 +527,6 @@
                                 if (mCount >= 6) continue;
 
                                 if (d >= 2 && scheduleGrid[p][d-1] === targetShift && scheduleGrid[p][d-2] === targetShift) continue;
-
                                 if (d >= 1 && scheduleGrid[p][d-1] === 'N') {
                                     if (!['A', 'J', 'O', '休'].includes(targetShift)) continue;
                                 }
@@ -541,16 +545,14 @@
                     }
                 }
 
-                // 🌟 4.2.5 絕對最低底線強制補齊 (確保 A=3, E=3, J=2, Y=2, F=3)
-                const strictMins = { 'A': 3, 'E': 3, 'J': 2, 'Y': 2, 'F': 3 };
+                // 4.2.5 絕對最低底線強制補齊 (至少各1人，滿足 AOJ=5, EY=5)
+                const strictMins = { 'A': 1, 'E': 1, 'J': 1, 'Y': 1, 'F': 2 };
                 for (let d = 0; d < numDays; d++) {
                     for (let shift in strictMins) {
                         let req = strictMins[shift];
                         let loops = 0;
                         while (getDailyCount(d, shift) < req && loops < 50) {
                             let replaced = false;
-                            
-                            // 優先從原本是 '休' 的人裡面抓
                             for (let p = 0; p < numPersonnel; p++) {
                                 if (kitchenIndices.includes(p)) continue;
                                 if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
@@ -561,8 +563,6 @@
                                     }
                                 }
                             }
-                            
-                            // 如果休的人不能上，考慮從非主力班別(如N班)抓人
                             if (!replaced) {
                                 for (let p = 0; p < numPersonnel; p++) {
                                     if (kitchenIndices.includes(p)) continue;
@@ -576,14 +576,13 @@
                                     }
                                 }
                             }
-                            
                             if (!replaced) break;
                             loops++;
                         }
                     }
                 }
 
-                // 🌟 4.3 絕對休假天數上限強制校正 (加入上限檢查)
+                // 4.3 絕對休假天數上限強制校正
                 for (let p = 0; p < numPersonnel; p++) {
                     if (kitchenIndices.includes(p)) continue;
                     
@@ -597,7 +596,6 @@
                     let loops = 0;
                     while (totalLeaves > actualMaxLeaves && loops < 50) {
                         let replaced = false;
-                        
                         const tryShifts = ['A', 'E', 'J', 'Y', 'F', 'N'];
                         
                         for (let d = 0; d < numDays; d++) {
@@ -644,13 +642,12 @@
                                 }
                             }
                         }
-                        
                         if (!replaced) break; 
                         loops++;
                     }
                 }
 
-                // 🌟 4.4 時數平衡微調 (堅守休假上限與各班底線)
+                // 4.4 深度時數平衡微調
                 for (let p = 0; p < numPersonnel; p++) {
                     if (kitchenIndices.includes(p)) continue;
                     
@@ -668,14 +665,20 @@
                         }
                     }
 
-                    // 加班過少：把休轉成有時數的班，嚴格遵守 maxDailyCapacity
+                    // 加班過少：增加上班天數或升級短班
                     let loops = 0;
-                    while (currentOt < targetOtMin && loops < 15) {
+                    while (currentOt < targetOtMin && loops < 100) {
                         let replaced = false;
+                        
+                        // 方法 A：休假變上班
                         for (let d = 0; d < numDays; d++) {
                             if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
                                 for (let s of ['A', 'E', 'F', 'J', 'Y', 'N']) {
-                                    if (getDailyCount(d, s) >= (maxDailyCapacity[s] || 3)) continue;
+                                    let cap = maxDailyCapacity[s] || 3;
+                                    if (loops > 20) cap += 1;
+                                    if (loops > 40) cap += 2;
+                                    
+                                    if (getDailyCount(d, s) >= cap) continue;
                                     if (canTakeShift(p, d, s)) {
                                         scheduleGrid[p][d] = s; 
                                         currentOt += (shiftDurations[s] - 8);
@@ -686,24 +689,48 @@
                                 if (replaced) break;
                             }
                         }
+                        
+                        // 方法 B：升級為 12H 長班
+                        if (!replaced) {
+                            for (let d = 0; d < numDays; d++) {
+                                let s = scheduleGrid[p][d];
+                                if (s !== null && s !== '休' && shiftDurations[s] === 10 && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                    if (getDailyCount(d, s) <= (dailyQuota[s] || 0)) continue; 
+
+                                    for (let s12 of ['A', 'E', 'F', 'O', 'C']) {
+                                        let cap = maxDailyCapacity[s12] || 3;
+                                        if (loops > 30) cap += 1;
+                                        if (getDailyCount(d, s12) >= cap) continue;
+                                        if (canTakeShift(p, d, s12)) {
+                                            scheduleGrid[p][d] = s12;
+                                            currentOt += 2;
+                                            replaced = true;
+                                            break;
+                                        }
+                                    }
+                                    if (replaced) break;
+                                }
+                            }
+                        }
                         if (!replaced) break;
                         loops++;
                     }
 
-                    // 加班過多：換休或降轉，嚴格確保不會跌破 dailyQuota 底線
+                    // 加班過多：換休或降轉
                     loops = 0;
-                    while (currentOt > targetOtMax && loops < 15) {
+                    while (currentOt > targetOtMax && loops < 100) {
                         let replaced = false;
                         let currentLeaves = 0;
                         for (let t = 0; t < numDays; t++) if (scheduleGrid[p][t] === '休') currentLeaves++;
                         
-                        // 1. 若休假未達上限，嘗試直接換休
+                        // 方法 A：降為休假 (保護群組下限 A+O+J>=5, E+Y>=5)
                         if (currentLeaves < actualMaxLeaves) {
                             for (let d = 0; d < numDays; d++) {
                                 let s = scheduleGrid[p][d];
                                 if (s !== null && s !== '休' && shiftDurations[s] > 8 && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                    // 🛑 核心防禦：絕對不能讓班別低於單日底線！
-                                    if (getDailyCount(d, s) <= (dailyQuota[s] || 1)) continue; 
+                                    if (getDailyCount(d, s) <= (dailyQuota[s] || 1)) {
+                                        if (loops < 80) continue; 
+                                    }
                                     
                                     let reduceOt = shiftDurations[s] - 8;
                                     scheduleGrid[p][d] = '休'; 
@@ -714,16 +741,21 @@
                             }
                         }
                         
-                        // 2. 若不能換休，則嘗試將 12H 班降轉為 10H 班
+                        // 方法 B：降為 10H 班 (保護群組下限)
                         if (!replaced) {
                             for (let d = 0; d < numDays; d++) {
                                 let s = scheduleGrid[p][d];
                                 if (s !== null && s !== '休' && shiftDurations[s] === 12 && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                    // 🛑 核心防禦：即使降轉，原本的 12H 班也不能跌破底線
-                                    if (getDailyCount(d, s) <= (dailyQuota[s] || 1)) continue; 
+                                    if (getDailyCount(d, s) <= (dailyQuota[s] || 1)) {
+                                        if (loops < 60) continue;
+                                    }
 
                                     for (let target10H of ['N', 'Y', 'J']) {
-                                        if (getDailyCount(d, target10H) >= (maxDailyCapacity[target10H] || 3)) continue;
+                                        let cap = maxDailyCapacity[target10H] || 3;
+                                        if (loops > 20) cap += 1;
+                                        if (loops > 40) cap += 2;
+                                        
+                                        if (getDailyCount(d, target10H) >= cap) continue;
                                         if (canTakeShift(p, d, target10H)) {
                                             scheduleGrid[p][d] = target10H; 
                                             currentOt -= (shiftDurations[s] - shiftDurations[target10H]);
@@ -738,6 +770,88 @@
                         if (!replaced) break;
                         loops++;
                     }
+                }
+
+                // 🌟 4.5 終極平準化：劫富濟貧 (Shift Swapping)
+                let madeSwap = true;
+                let swapLoops = 0;
+                while (madeSwap && swapLoops < 300) {
+                    madeSwap = false;
+                    
+                    let ots = new Array(numPersonnel).fill(0);
+                    let leaves = new Array(numPersonnel).fill(0);
+                    for(let p=0; p<numPersonnel; p++) {
+                        if(kitchenIndices.includes(p)) continue;
+                        for(let d=0; d<numDays; d++) {
+                            let s = scheduleGrid[p][d];
+                            if(s==='休') leaves[p]++;
+                            else if(s!==null && shiftDurations[s]) ots[p] += Math.max(0, shiftDurations[s]-8);
+                        }
+                    }
+                    
+                    let sortedP = [];
+                    for(let p=0; p<numPersonnel; p++) if(!kitchenIndices.includes(p)) sortedP.push(p);
+                    sortedP.sort((a,b) => ots[b] - ots[a]); 
+                    
+                    for(let i=0; i<sortedP.length; i++) {
+                        let richP = sortedP[i];
+                        for(let j=sortedP.length-1; j>i; j--) {
+                            let poorP = sortedP[j];
+                            
+                            if (ots[richP] - ots[poorP] <= 2) continue; 
+                            
+                            for(let d=0; d<numDays; d++) {
+                                if (preFilledData.hasOwnProperty(`${richP}_${d}`) || preFilledData.hasOwnProperty(`${poorP}_${d}`)) continue;
+                                
+                                let sR = scheduleGrid[richP][d];
+                                let sP = scheduleGrid[poorP][d];
+                                
+                                if (sR === sP) continue;
+                                
+                                let durR = sR === '休' ? 0 : Math.max(0, shiftDurations[sR]-8);
+                                let durP = sP === '休' ? 0 : Math.max(0, shiftDurations[sP]-8);
+                                
+                                if (durR <= durP) continue; 
+                                
+                                let newOtR = ots[richP] - durR + durP;
+                                let newOtP = ots[poorP] - durP + durR;
+                                
+                                let oldDiff = ots[richP] - ots[poorP];
+                                let newDiff = Math.abs(newOtR - newOtP);
+                                if (newDiff >= oldDiff) continue; 
+                                
+                                if (sR === 'O') {
+                                    let cO = 0; for(let x=0; x<numDays; x++) if(scheduleGrid[poorP][x]==='O') cO++;
+                                    if (cO >= 2) continue;
+                                }
+                                if (sP === 'O') {
+                                    let cO = 0; for(let x=0; x<numDays; x++) if(scheduleGrid[richP][x]==='O') cO++;
+                                    if (cO >= 2) continue;
+                                }
+                                
+                                if (sR !== '休' && !canTakeShift(poorP, d, sR)) continue;
+                                if (sP !== '休' && !canTakeShift(richP, d, sP)) continue;
+                                
+                                if (sP === '休' && sR !== '休') { 
+                                    let preL = 0; for(let x=0;x<numDays;x++) if(preFilledData[`${richP}_${x}`]==='休') preL++;
+                                    let maxL = Math.max(targetMaxLeaves, preL);
+                                    if (leaves[richP] + 1 > maxL) continue; 
+                                }
+                                
+                                scheduleGrid[richP][d] = sP;
+                                scheduleGrid[poorP][d] = sR;
+                                ots[richP] = newOtR;
+                                ots[poorP] = newOtP;
+                                if(sP === '休') { leaves[richP]++; leaves[poorP]--; }
+                                
+                                madeSwap = true;
+                                break; 
+                            }
+                            if(madeSwap) break;
+                        }
+                        if(madeSwap) break;
+                    }
+                    swapLoops++;
                 }
 
                 // 5. 輸出整合
@@ -781,7 +895,7 @@
                 dfOut[summaryRowIdx][0] = "每日班別統計";
                 dfOut[summaryRowIdx][1] = "各班人數";
 
-                let statsOutputText = `排班成功！\n`;
+                let statsOutputText = `排班完成！\n`;
 
                 for (let d = 0; d < numDays; d++) {
                     const cIdx = dateCols[d];
