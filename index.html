@@ -45,7 +45,7 @@
         <main class="space-y-8">
             <div class="bg-slate-50 rounded-xl p-5 border border-slate-200/80 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                    <h3 class="text-sm font-semibold text-slate-700 mb-2">當前套用排班（21人）</h3>
+                    <h3 class="text-sm font-semibold text-slate-700 mb-2">當前套用排班（21人基準）</h3>
                     <ul class="text-xs text-slate-500 space-y-1 list-disc pl-4">
                         <li>早班：A班 (3人)、J班 (2人)、O班 (1人)、C班 (1人)</li>
                         <li>中晚班：E班 (3人)、Y班 (2人)、F班 (2人)</li>
@@ -63,16 +63,32 @@
                     </div>
                     <p class="text-xs text-slate-400">開啟顯示 4(22-8)，關閉顯示 4（統計與時數將自動連動）。</p>
                     
-                    <div class="pt-3 border-t border-slate-200">
-                        <h4 class="text-sm font-bold text-slate-700 mb-2 flex items-center">
-                            <svg class="w-4 h-4 mr-1 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                            目標加班時數 (微調區間)
-                        </h4>
-                        <div class="flex items-center space-x-2 text-sm text-slate-600">
-                            <input type="number" id="ot-min" value="56" class="w-16 px-2 py-1.5 border border-slate-300 rounded-md text-center focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-semibold text-indigo-700 bg-white shadow-sm">
-                            <span>小時 ~</span>
-                            <input type="number" id="ot-max" value="58" class="w-16 px-2 py-1.5 border border-slate-300 rounded-md text-center focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-semibold text-indigo-700 bg-white shadow-sm">
-                            <span>小時</span>
+                    <div class="pt-3 border-t border-slate-200 space-y-4">
+                        <div>
+                            <h4 class="text-sm font-bold text-slate-700 mb-2 flex items-center">
+                                <svg class="w-4 h-4 mr-1 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                目標加班時數 <span class="text-xs font-normal text-slate-400 ml-1">(留白代表無限制)</span>
+                            </h4>
+                            <div class="flex items-center space-x-2 text-sm text-slate-600">
+                                <input type="number" id="ot-min" placeholder="無" value="56" class="w-16 px-2 py-1 border border-slate-300 rounded-md text-center focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-semibold text-indigo-700 bg-white shadow-sm placeholder:text-slate-300 placeholder:font-normal">
+                                <span>~</span>
+                                <input type="number" id="ot-max" placeholder="無" value="58" class="w-16 px-2 py-1 border border-slate-300 rounded-md text-center focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-semibold text-indigo-700 bg-white shadow-sm placeholder:text-slate-300 placeholder:font-normal">
+                                <span>小時</span>
+                            </div>
+                            <p class="text-xs text-rose-500 font-medium mt-2 bg-rose-50 p-1.5 rounded inline-block border border-rose-100">
+                                若要求「xx小時以上 」，請將右側數字留白。
+                            </p>
+                        </div>
+                        
+                        <div>
+                            <h4 class="text-sm font-bold text-slate-700 mb-2 flex items-center">
+                                <svg class="w-4 h-4 mr-1 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                每人休假上限
+                            </h4>
+                            <div class="flex items-center space-x-2 text-sm text-slate-600">
+                                <input type="number" id="max-leaves" value="9" class="w-16 px-2 py-1 border border-slate-300 rounded-md text-center focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-semibold text-emerald-700 bg-white shadow-sm">
+                                <span>天 <span class="text-xs text-slate-400 font-normal"></span></span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -220,9 +236,23 @@
     function runSchedulingEngine() {
         if (!excelSheetData) return;
         
-        // 🌟 讀取自訂的加班時數
-        const targetOtMin = parseInt(document.getElementById('ot-min').value, 10) || 56;
-        const targetOtMax = parseInt(document.getElementById('ot-max').value, 10) || 58;
+        const minInput = document.getElementById('ot-min').value;
+        const maxInput = document.getElementById('ot-max').value;
+        
+        const targetOtMin = minInput === "" ? 0 : parseInt(minInput, 10);
+        const targetOtMax = maxInput === "" ? Infinity : parseInt(maxInput, 10);
+        const targetMaxLeaves = parseInt(document.getElementById('max-leaves').value, 10) || 9;
+
+        let otTargetText = "";
+        if (targetOtMin === 0 && targetOtMax === Infinity) {
+            otTargetText = "無限制";
+        } else if (targetOtMax === Infinity) {
+            otTargetText = `${targetOtMin} 小時以上`;
+        } else if (targetOtMin === 0) {
+            otTargetText = `${targetOtMax} 小時以下`;
+        } else {
+            otTargetText = `${targetOtMin} ~ ${targetOtMax} 小時`;
+        }
 
         const includeTime = includeTimeCheckbox.checked;
         const spinner = runScheduleButton.querySelector('.spinner');
@@ -230,11 +260,10 @@
         spinner.classList.remove('hidden');
         
         resultContainer.classList.remove('hidden');
-        statsDisplay.textContent = `正在執行全局最大匹配與排班運算 (目標加班：${targetOtMin}~${targetOtMax} 小時)，請稍候...`;
+        statsDisplay.textContent = `正在執行全局最大匹配與排班運算\n(目標加班：${otTargetText} | 休假鐵律：不大於 ${targetMaxLeaves} 天)\n請稍候...`;
         
         setTimeout(() => {
             try {
-                // 1. 定義日期與人員邊界
                 const headerRow = excelSheetData[0];
                 const dateCols = [];
                 for (let c = 0; c < headerRow.length; c++) {
@@ -244,10 +273,11 @@
                 const startRow = 2; 
                 const numPersonnel = excelSheetData.length - startRow;
 
-                // 2. 解析組別與人工假單
+                // 🌟 修改點 1：新增 preFilledLeaveNames 記憶原始假別名稱
                 const baoYiIndices = [];
                 const kitchenIndices = [];
                 const preFilledData = {}; 
+                const preFilledLeaveNames = {}; 
 
                 for (let p = 0; p < numPersonnel; p++) {
                     const rIdx = startRow + p;
@@ -261,10 +291,14 @@
                         if (cellVal === "" || cellVal === "nan") continue;
                         
                         const charHead = cellVal[0].toUpperCase();
-                        if (shiftDurations.hasOwnProperty(charHead)) {
+                        // 判斷是否為標準班別 (長度=1 或者是帶有時間括號的格式)
+                        const isShift = dutyCodes.includes(charHead) && (cellVal.length === 1 || cellVal.includes('('));
+                        
+                        if (isShift && shiftDurations.hasOwnProperty(charHead)) {
                             preFilledData[`${p}_${d}`] = charHead;
                         } else {
                             preFilledData[`${p}_${d}`] = '休'; 
+                            preFilledLeaveNames[`${p}_${d}`] = cellVal; // 記憶如「慰休」、「事假」
                         }
                     }
                 }
@@ -283,13 +317,27 @@
                     }
                 }
 
+                const canTakeShift = (p, d, targetShift) => {
+                    if (d > 0 && scheduleGrid[p][d-1] !== null && scheduleGrid[p][d-1] !== '休') {
+                        let prev = scheduleGrid[p][d-1];
+                        if (shiftEndTimes[prev] !== undefined && shiftStartTimes[targetShift] !== undefined) {
+                            if (shiftEndTimes[prev] + 11.0 > shiftStartTimes[targetShift] + 24.0) return false;
+                        }
+                    }
+                    if (d < numDays - 1 && scheduleGrid[p][d+1] !== null && scheduleGrid[p][d+1] !== '休') {
+                        let next = scheduleGrid[p][d+1];
+                        if (shiftEndTimes[targetShift] !== undefined && shiftStartTimes[next] !== undefined) {
+                            if (shiftEndTimes[targetShift] + 11.0 > shiftStartTimes[next] + 24.0) return false;
+                        }
+                    }
+                    return true;
+                };
+
                 const dailyQuota = {
                     'A': 3, 'J': 2, 'C': 1, 'E': 3, 'Y': 2, 'W': 1, 'F': 2, '2': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2
                 };
 
-                // 4.1 鋪設特殊長輪轉骨牌 (44RW, IV)
                 for (let d = 0; d < numDays; d++) {
-                    // 44RW
                     let p4 = -1;
                     for (let p = 0; p < numPersonnel; p++) {
                         if (kitchenIndices.includes(p)) continue;
@@ -321,7 +369,6 @@
                         }
                     }
 
-                    // IV
                     let pI = -1;
                     for (let p = 0; p < numPersonnel; p++) {
                         if (kitchenIndices.includes(p)) continue;
@@ -351,7 +398,6 @@
                     }
                 }
 
-                // 4.1.5 O班全局均分發牌 (二分圖最大匹配)
                 let availableO = [];
                 let hasO = new Array(numPersonnel).fill(0);
                 
@@ -363,17 +409,7 @@
                         if (scheduleGrid[p][d] === 'O') hasO[p]++;
                         if (scheduleGrid[p][d] !== null) continue; 
                         
-                        let canTake = true;
-                        if (d > 0 && scheduleGrid[p][d-1] !== null && scheduleGrid[p][d-1] !== '休') {
-                            let prevShift = scheduleGrid[p][d-1];
-                            if (shiftEndTimes[prevShift] !== undefined && shiftEndTimes[prevShift] > 21.0) canTake = false;
-                        }
-                        if (d < numDays - 1 && scheduleGrid[p][d+1] !== null && scheduleGrid[p][d+1] !== '休') {
-                            let nextShift = scheduleGrid[p][d+1];
-                            if (shiftStartTimes[nextShift] !== undefined && 31.0 > shiftStartTimes[nextShift] + 24.0) canTake = false;
-                        }
-                        
-                        if (canTake) availableO[d].push(p);
+                        if (canTakeShift(p, d, 'O')) availableO[d].push(p);
                     }
                 }
 
@@ -420,19 +456,10 @@
                         let minO = 999;
                         for (let p = 0; p < numPersonnel; p++) {
                             if (kitchenIndices.includes(p) || scheduleGrid[p][d] !== null) continue;
-                            
-                            let canTake = true;
-                            if (d > 0 && scheduleGrid[p][d-1] !== null && scheduleGrid[p][d-1] !== '休') {
-                                if (shiftEndTimes[scheduleGrid[p][d-1]] > 21.0) canTake = false;
-                            }
-                            if (d < numDays - 1 && scheduleGrid[p][d+1] !== null && scheduleGrid[p][d+1] !== '休') {
-                                if (31.0 > shiftStartTimes[scheduleGrid[p][d+1]] + 24.0) canTake = false;
-                            }
-                            if (!canTake) continue;
+                            if (!canTakeShift(p, d, 'O')) continue;
 
                             let currentO = 0;
                             for(let t=0; t<numDays; t++) if(scheduleGrid[p][t] === 'O') currentO++;
-                            
                             if (currentO >= 2) continue; 
 
                             if (currentO < minO) {
@@ -447,7 +474,6 @@
                     }
                 }
 
-                // 4.2 剩餘常規網格隨機局部搜尋與填補
                 for (let d = 0; d < numDays; d++) {
                     const currentCounts = {};
                     Object.keys(dailyQuota).forEach(k => currentCounts[k] = 0);
@@ -484,20 +510,7 @@
                                     if (!['A', 'J', 'O', '休'].includes(targetShift)) continue;
                                 }
 
-                                let canTakeGreedy = true;
-                                if (d > 0 && scheduleGrid[p][d-1] !== null && scheduleGrid[p][d-1] !== '休') {
-                                    let prevShift = scheduleGrid[p][d-1];
-                                    if (shiftEndTimes[prevShift] && shiftStartTimes[targetShift]) {
-                                        if (shiftEndTimes[prevShift] + 11.0 > shiftStartTimes[targetShift] + 24.0) canTakeGreedy = false;
-                                    }
-                                }
-                                if (d < numDays - 1 && scheduleGrid[p][d+1] !== null && scheduleGrid[p][d+1] !== '休') {
-                                    let nextShift = scheduleGrid[p][d+1];
-                                    if (shiftEndTimes[targetShift] && shiftStartTimes[nextShift]) {
-                                        if (shiftEndTimes[targetShift] + 11.0 > shiftStartTimes[nextShift] + 24.0) canTakeGreedy = false;
-                                    }
-                                }
-                                if (!canTakeGreedy) continue;
+                                if (!canTakeShift(p, d, targetShift)) continue;
 
                                 scheduleGrid[p][d] = targetShift;
                                 pool.splice(i, 1);
@@ -511,11 +524,79 @@
                     }
                 }
 
-                // 🌟 4.3 時數平衡微調 (根據 UI 使用者輸入的目標加班時數)
+                // 🌟 修改點 2：絕對休假天數上限強制校正 (加入強制突破機制)
                 for (let p = 0; p < numPersonnel; p++) {
                     if (kitchenIndices.includes(p)) continue;
                     
-                    // 計算此人當前分配的加班時數
+                    let preLeaves = 0;
+                    for (let d = 0; d < numDays; d++) { if (preFilledData[`${p}_${d}`] === '休') preLeaves++; }
+                    let actualMaxLeaves = Math.max(targetMaxLeaves, preLeaves);
+                    
+                    let totalLeaves = 0;
+                    for (let d = 0; d < numDays; d++) { if (scheduleGrid[p][d] === '休') totalLeaves++; }
+                    
+                    let loops = 0;
+                    while (totalLeaves > actualMaxLeaves && loops < 50) {
+                        let replaced = false;
+                        
+                        // 第一波：嘗試找符合 11 小時，且不影響 J 班休假連鎖的空檔
+                        for (let d = 0; d < numDays; d++) {
+                            if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                if (d > 0 && scheduleGrid[p][d-1] === 'J') continue;
+                                for (let s of ['N', 'A', 'Y', 'E', 'F']) {
+                                    if (canTakeShift(p, d, s)) {
+                                        scheduleGrid[p][d] = s;
+                                        totalLeaves--;
+                                        replaced = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (replaced) break;
+                        }
+                        
+                        // 第二波：若找不到，放棄 J 班連鎖保護
+                        if (!replaced) {
+                            for (let d = 0; d < numDays; d++) {
+                                if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                    for (let s of ['N', 'A', 'Y', 'E', 'F']) {
+                                        if (canTakeShift(p, d, s)) {
+                                            scheduleGrid[p][d] = s;
+                                            totalLeaves--;
+                                            replaced = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (replaced) break;
+                            }
+                        }
+                        
+                        // 第三波 (強制突破)：如果連 11 小時規定都找不到縫隙，為了死守休假上限，強制塞 N 班！
+                        if (!replaced) {
+                            for (let d = 0; d < numDays; d++) {
+                                if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                    scheduleGrid[p][d] = 'N'; 
+                                    totalLeaves--;
+                                    replaced = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (!replaced) break; 
+                        loops++;
+                    }
+                }
+
+                for (let p = 0; p < numPersonnel; p++) {
+                    if (kitchenIndices.includes(p)) continue;
+                    
+                    let actualMaxLeaves = targetMaxLeaves;
+                    let preLeaves = 0;
+                    for (let d = 0; d < numDays; d++) { if (preFilledData[`${p}_${d}`] === '休') preLeaves++; }
+                    actualMaxLeaves = Math.max(targetMaxLeaves, preLeaves);
+
                     let currentOt = 0;
                     for (let d = 0; d < numDays; d++) {
                         let s = scheduleGrid[p][d];
@@ -525,7 +606,6 @@
                         }
                     }
 
-                    // 狀況一：加班過少，需要把輪休換成 A 班(補4小時)
                     let loops = 0;
                     while (currentOt < targetOtMin && loops < 15) {
                         let replaced = false;
@@ -541,18 +621,36 @@
                         loops++;
                     }
 
-                    // 狀況二：加班過多，把時數長的班換成輪休(扣除時數)
                     loops = 0;
                     while (currentOt > targetOtMax && loops < 15) {
                         let replaced = false;
-                        for (let d = 0; d < numDays; d++) {
-                            let s = scheduleGrid[p][d];
-                            if (s !== null && s !== '休' && shiftDurations[s] > 8 && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                let reduceOt = shiftDurations[s] - 8;
-                                scheduleGrid[p][d] = '休'; 
-                                currentOt -= reduceOt;
-                                replaced = true;
-                                break;
+                        let currentLeaves = 0;
+                        for (let t = 0; t < numDays; t++) if (scheduleGrid[p][t] === '休') currentLeaves++;
+                        
+                        if (currentLeaves < actualMaxLeaves) {
+                            for (let d = 0; d < numDays; d++) {
+                                let s = scheduleGrid[p][d];
+                                if (s !== null && s !== '休' && shiftDurations[s] > 8 && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                    let reduceOt = shiftDurations[s] - 8;
+                                    scheduleGrid[p][d] = '休'; 
+                                    currentOt -= reduceOt;
+                                    replaced = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (!replaced) {
+                            for (let d = 0; d < numDays; d++) {
+                                let s = scheduleGrid[p][d];
+                                if (s !== null && s !== '休' && shiftDurations[s] === 12 && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                    if (canTakeShift(p, d, 'N')) {
+                                        scheduleGrid[p][d] = 'N'; 
+                                        currentOt -= 2;
+                                        replaced = true;
+                                        break;
+                                    }
+                                }
                             }
                         }
                         if (!replaced) break;
@@ -560,7 +658,6 @@
                     }
                 }
 
-                // 5. 輸出整合
                 const dfOut = JSON.parse(JSON.stringify(excelSheetData));
                 const otColIdx = dfOut[0].length;
                 dfOut[0][otColIdx] = "當月加班時數";
@@ -575,8 +672,13 @@
                         const s = scheduleGrid[p][d];
 
                         if (!kitchenIndices.includes(p)) {
+                            // 🌟 修改點 3：輸出時完美還原「慰休」、「事假」等字眼
                             if (s === '休') {
-                                dfOut[rIdx][cIdx] = '輪休';
+                                if (preFilledLeaveNames.hasOwnProperty(`${p}_${d}`)) {
+                                    dfOut[rIdx][cIdx] = preFilledLeaveNames[`${p}_${d}`];
+                                } else {
+                                    dfOut[rIdx][cIdx] = '輪休';
+                                }
                             } else {
                                 dfOut[rIdx][cIdx] = includeTime ? (shiftLabels[s] || s) : s;
                             }
@@ -591,13 +693,12 @@
                     dfOut[rIdx][otColIdx] = String(totalOt);
                 }
 
-                // 產生每日統計面板
                 const summaryRowIdx = dfOut.length;
                 dfOut[summaryRowIdx] = Array(dfOut[0].length).fill("");
                 dfOut[summaryRowIdx][0] = "每日班別統計";
                 dfOut[summaryRowIdx][1] = "各班人數";
 
-                let statsOutputText = `以下為 Excel 底部【每日班別統計】與 21 人陣容預覽：\n\n`;
+                let statsOutputText = `排班成功！\n`;
 
                 for (let d = 0; d < numDays; d++) {
                     const cIdx = dateCols[d];
@@ -630,7 +731,6 @@
 
                 statsDisplay.textContent = statsOutputText;
 
-                // 產生 Excel 檔案
                 const newWorksheet = XLSX.utils.aoa_to_sheet(dfOut);
                 finalOutputWorkbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(finalOutputWorkbook, newWorksheet, rawWorkbook.SheetNames[0]);
