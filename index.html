@@ -45,7 +45,7 @@
         <main class="space-y-8">
             <div class="bg-slate-50 rounded-xl p-5 border border-slate-200/80 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- 左側：班別規則說明 -->
-                <div>
+                 <div>
                     <h3 class="text-sm font-semibold text-slate-700 mb-2">當前套用排班</h3>
                     <ul class="text-xs text-slate-500 space-y-1 list-disc pl-4">
                         <li>AOJ ：單日 5 人 (每種至少 1 人)</span></li>
@@ -166,15 +166,15 @@
         '2': 12, '4': 10, 'A': 12, 'C': 12, 'E': 12, 'F': 12, 'I': 10, 'J': 10, 'O': 12, 'R': 8, 'V': 12, 'W': 10, 'Y': 10, 'N': 10, '休': 0
     };
 
-    // 🌟 1. 定義單日班別底線 (AOJ=5, EY=5, F=2, W=1, 2=1)
+    // 🌟 1. 定義單日班別底線 (J班已獨立發牌，移出常規池)
     const dailyQuota = {
-        'A': 2, 'J': 2, 'O': 1, // AOJ = 5
+        'A': 2, 'O': 1,         // AOJ = 5 (J已獨立發牌約2.33人/日)
         'E': 3, 'Y': 2,         // EY = 5
         'F': 2, 'W': 1, '2': 1, 
         'C': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2, 'N': 0
     };
 
-    // 🌟 2. 定義單日班別容載上限 (限制最多擴充人數)
+    // 🌟 2. 定義單日班別容載上限 
     const maxDailyCapacity = {
         'N': 2, 'C': 1, 'O': 2, 'W': 1, '2': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2,
         'F': 4, 'A': 5, 'E': 5, 'J': 4, 'Y': 4 
@@ -420,7 +420,85 @@
                     }
                 }
 
-                // 4.1.5 O班全局均分發牌
+                // 🌟 4.1.5 J班與休假專屬綁定發牌 (放假前必排J班，每人嚴格 2 次)
+                let hasJ = new Array(numPersonnel).fill(0);
+                let dailyJ = new Array(numDays).fill(0);
+
+                // 第一階段：盡量確保每天都有 2 個 J 班 (優先發配)
+                for (let loop = 0; loop < 2; loop++) {
+                    for (let d = 0; d < numDays; d++) {
+                        while (dailyJ[d] < 2) {
+                            let candidates = [];
+                            for(let p = 0; p < numPersonnel; p++) {
+                                if (kitchenIndices.includes(p)) continue;
+                                if (hasJ[p] >= 2) continue;
+                                if (scheduleGrid[p][d] !== null) continue;
+                                
+                                let nextDayOk = false;
+                                if (d === numDays - 1) {
+                                    nextDayOk = true; 
+                                } else {
+                                    if (scheduleGrid[p][d+1] === null || scheduleGrid[p][d+1] === '休') {
+                                        nextDayOk = true;
+                                    }
+                                }
+                                if (!nextDayOk) continue;
+                                if (!canTakeShift(p, d, 'J')) continue;
+
+                                candidates.push(p);
+                            }
+
+                            if (candidates.length > 0) {
+                                candidates.sort((a,b) => hasJ[a] - hasJ[b] || Math.random() - 0.5);
+                                let bestP = candidates[0];
+                                scheduleGrid[bestP][d] = 'J';
+                                if (d < numDays - 1 && scheduleGrid[bestP][d+1] === null) {
+                                    scheduleGrid[bestP][d+1] = '休'; // 綁定後天的休假
+                                }
+                                hasJ[bestP]++;
+                                dailyJ[d]++;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // 第二階段：地毯式搜索，確保每個人都精準補齊 2 次 J 班
+                for(let p = 0; p < numPersonnel; p++) {
+                    if (kitchenIndices.includes(p)) continue;
+                    let loops = 0;
+                    while(hasJ[p] < 2 && loops < 50) {
+                        let assigned = false;
+                        // 先嘗試不超過單日容量
+                        for(let d = 0; d < numDays; d++) {
+                            if (scheduleGrid[p][d] === null) {
+                                let nextDayOk = (d === numDays - 1) || (scheduleGrid[p][d+1] === null || scheduleGrid[p][d+1] === '休');
+                                if (nextDayOk && dailyJ[d] < maxDailyCapacity['J'] && canTakeShift(p, d, 'J')) {
+                                    scheduleGrid[p][d] = 'J';
+                                    if (d < numDays - 1 && scheduleGrid[p][d+1] === null) scheduleGrid[p][d+1] = '休';
+                                    hasJ[p]++; dailyJ[d]++; assigned = true; break;
+                                }
+                            }
+                        }
+                        // 找不到縫隙就放寬限制強塞
+                        if (!assigned) {
+                            for(let d = 0; d < numDays; d++) {
+                                if (scheduleGrid[p][d] === null) {
+                                    let nextDayOk = (d === numDays - 1) || (scheduleGrid[p][d+1] === null || scheduleGrid[p][d+1] === '休');
+                                    if (nextDayOk) {
+                                        scheduleGrid[p][d] = 'J';
+                                        if (d < numDays - 1 && scheduleGrid[p][d+1] === null) scheduleGrid[p][d+1] = '休';
+                                        hasJ[p]++; dailyJ[d]++; assigned = true; break;
+                                    }
+                                }
+                            }
+                        }
+                        loops++;
+                    }
+                }
+
+                // 4.1.6 O班全局均分發牌
                 let availableO = [];
                 let hasO = new Array(numPersonnel).fill(0);
                 
@@ -495,7 +573,7 @@
                     }
                 }
 
-                // 4.2 優先將池子填滿底線
+                // 4.2 優先將池子填滿底線 (J 已移出池子)
                 for (let d = 0; d < numDays; d++) {
                     const currentCounts = {};
                     Object.keys(dailyQuota).forEach(k => currentCounts[k] = 0);
@@ -528,7 +606,7 @@
 
                                 if (d >= 2 && scheduleGrid[p][d-1] === targetShift && scheduleGrid[p][d-2] === targetShift) continue;
                                 if (d >= 1 && scheduleGrid[p][d-1] === 'N') {
-                                    if (!['A', 'J', 'O', '休'].includes(targetShift)) continue;
+                                    if (!['A', 'O', '休'].includes(targetShift)) continue;
                                 }
 
                                 if (!canTakeShift(p, d, targetShift)) continue;
@@ -545,8 +623,8 @@
                     }
                 }
 
-                // 4.2.5 絕對最低底線強制補齊 (至少各1人，滿足 AOJ=5, EY=5)
-                const strictMins = { 'A': 1, 'E': 1, 'J': 1, 'Y': 1, 'F': 2 };
+                // 4.2.5 絕對最低底線強制補齊 (至少各1人，不處理J)
+                const strictMins = { 'A': 1, 'E': 1, 'Y': 1, 'F': 2 };
                 for (let d = 0; d < numDays; d++) {
                     for (let shift in strictMins) {
                         let req = strictMins[shift];
@@ -556,6 +634,7 @@
                             for (let p = 0; p < numPersonnel; p++) {
                                 if (kitchenIndices.includes(p)) continue;
                                 if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                    if (d > 0 && scheduleGrid[p][d-1] === 'J') continue; // 神盾保護 J班後的休假
                                     if (canTakeShift(p, d, shift)) {
                                         scheduleGrid[p][d] = shift;
                                         replaced = true;
@@ -596,11 +675,11 @@
                     let loops = 0;
                     while (totalLeaves > actualMaxLeaves && loops < 50) {
                         let replaced = false;
-                        const tryShifts = ['A', 'E', 'J', 'Y', 'F', 'N'];
+                        const tryShifts = ['A', 'E', 'Y', 'F', 'N'];
                         
                         for (let d = 0; d < numDays; d++) {
                             if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                if (d > 0 && scheduleGrid[p][d-1] === 'J') continue; 
+                                if (d > 0 && scheduleGrid[p][d-1] === 'J') continue; // 神盾保護
                                 
                                 for (let s of tryShifts) {
                                     if (getDailyCount(d, s) >= (maxDailyCapacity[s] || 3)) continue;
@@ -618,6 +697,7 @@
                         if (!replaced) {
                             for (let d = 0; d < numDays; d++) {
                                 if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                    if (d > 0 && scheduleGrid[p][d-1] === 'J') continue; // 神盾保護
                                     for (let s of tryShifts) {
                                         if (getDailyCount(d, s) >= (maxDailyCapacity[s] || 3)) continue;
                                         if (canTakeShift(p, d, s)) {
@@ -635,6 +715,7 @@
                         if (!replaced) {
                             for (let d = 0; d < numDays; d++) {
                                 if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                    if (d > 0 && scheduleGrid[p][d-1] === 'J') continue; // 神盾保護
                                     scheduleGrid[p][d] = 'N'; 
                                     totalLeaves--;
                                     replaced = true;
@@ -647,7 +728,7 @@
                     }
                 }
 
-                // 4.4 深度時數平衡微調
+                // 4.4 深度時數平衡微調 (堅守 J 班與其休假)
                 for (let p = 0; p < numPersonnel; p++) {
                     if (kitchenIndices.includes(p)) continue;
                     
@@ -665,7 +746,7 @@
                         }
                     }
 
-                    // 加班過少：增加上班天數或升級短班
+                    // 加班過少：休假變上班 或 升級短班
                     let loops = 0;
                     while (currentOt < targetOtMin && loops < 100) {
                         let replaced = false;
@@ -673,7 +754,9 @@
                         // 方法 A：休假變上班
                         for (let d = 0; d < numDays; d++) {
                             if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                for (let s of ['A', 'E', 'F', 'J', 'Y', 'N']) {
+                                if (d > 0 && scheduleGrid[p][d-1] === 'J') continue; // 神盾保護 J班後的休假
+
+                                for (let s of ['A', 'E', 'F', 'Y', 'N']) {
                                     let cap = maxDailyCapacity[s] || 3;
                                     if (loops > 20) cap += 1;
                                     if (loops > 40) cap += 2;
@@ -690,11 +773,12 @@
                             }
                         }
                         
-                        // 方法 B：升級為 12H 長班
+                        // 方法 B：升級短班為 12H 長班
                         if (!replaced) {
                             for (let d = 0; d < numDays; d++) {
                                 let s = scheduleGrid[p][d];
                                 if (s !== null && s !== '休' && shiftDurations[s] === 10 && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                    if (s === 'J') continue; // 神盾保護：絕不升級 J 班
                                     if (getDailyCount(d, s) <= (dailyQuota[s] || 0)) continue; 
 
                                     for (let s12 of ['A', 'E', 'F', 'O', 'C']) {
@@ -716,18 +800,19 @@
                         loops++;
                     }
 
-                    // 加班過多：換休或降轉
+                    // 加班過多：換休 或 降轉
                     loops = 0;
                     while (currentOt > targetOtMax && loops < 100) {
                         let replaced = false;
                         let currentLeaves = 0;
                         for (let t = 0; t < numDays; t++) if (scheduleGrid[p][t] === '休') currentLeaves++;
                         
-                        // 方法 A：降為休假 (保護群組下限 A+O+J>=5, E+Y>=5)
+                        // 方法 A：降為休假
                         if (currentLeaves < actualMaxLeaves) {
                             for (let d = 0; d < numDays; d++) {
                                 let s = scheduleGrid[p][d];
                                 if (s !== null && s !== '休' && shiftDurations[s] > 8 && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                    if (s === 'J') continue; // 神盾保護：絕不刪除 J 班
                                     if (getDailyCount(d, s) <= (dailyQuota[s] || 1)) {
                                         if (loops < 80) continue; 
                                     }
@@ -741,7 +826,7 @@
                             }
                         }
                         
-                        // 方法 B：降為 10H 班 (保護群組下限)
+                        // 方法 B：降為 10H 班 
                         if (!replaced) {
                             for (let d = 0; d < numDays; d++) {
                                 let s = scheduleGrid[p][d];
@@ -750,7 +835,7 @@
                                         if (loops < 60) continue;
                                     }
 
-                                    for (let target10H of ['N', 'Y', 'J']) {
+                                    for (let target10H of ['N', 'Y']) { // 絕不降轉為 J 班
                                         let cap = maxDailyCapacity[target10H] || 3;
                                         if (loops > 20) cap += 1;
                                         if (loops > 40) cap += 2;
@@ -807,6 +892,11 @@
                                 let sP = scheduleGrid[poorP][d];
                                 
                                 if (sR === sP) continue;
+                                // 神盾保護：J 班絕對不參與互換
+                                if (sR === 'J' || sP === 'J') continue;
+                                // 神盾保護：J 班後面的休假絕對不參與互換
+                                if (sR === '休' && d > 0 && scheduleGrid[richP][d-1] === 'J') continue;
+                                if (sP === '休' && d > 0 && scheduleGrid[poorP][d-1] === 'J') continue;
                                 
                                 let durR = sR === '休' ? 0 : Math.max(0, shiftDurations[sR]-8);
                                 let durP = sP === '休' ? 0 : Math.max(0, shiftDurations[sP]-8);
