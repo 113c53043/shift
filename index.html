@@ -48,10 +48,12 @@
                 <div>
                     <h3 class="text-sm font-semibold text-slate-700 mb-2">當前套用排班（防呆防溢出版）</h3>
                     <ul class="text-xs text-slate-500 space-y-1 list-disc pl-4">
-                        <li>AOJ ：單日 5 人 (每種至少 1 人)</span></li>
-                        <li>EY ：單日 5 人 (每種至少 1 人)</span></li>
-                        <li>F = 2人、W班=1人、2班=1人</span></li>
-                        <li>N班：單日最高 2 人</li>
+                        <li>每日上班人數與每人工作天數盡量平均</li>
+                        <li>A班：單日至少 5 人</li>
+                        <li>E班：單日至少 5 人</li>
+                        <li>F班：單日至少 4 人</li>
+                        <li>A、E、F 依個人當月次數盡量平均分配</li>
+                        <li>只排 A、O、E、F、W、2、C、V、I、R、4 班</li>
                     </ul>
                 </div>
                 
@@ -140,10 +142,9 @@
     
     // 🌟 定義所有完整班別與時間
     const shiftTimes = {
-        '2': [11, 23], '4': [22, 32], 'A': [8, 20], 'B': [8, 16], 'C': [9, 21],
-        'D': [9, 17], 'E': [10, 22], 'F': [12, 24], 'I': [16, 26], 'J': [8, 18],
-        'L': [14, 26], 'N': [11, 21], 'O': [8, 20], 'R': [19, 27], 'T': [9, 19],
-        'V': [13, 25], 'W': [14, 24], 'Y': [12, 22]
+        '2': [11, 23], '4': [22, 32], 'A': [8, 20], 'C': [9, 21],
+        'E': [10, 22], 'F': [12, 24], 'I': [16, 26], 'O': [8, 20],
+        'R': [19, 27], 'V': [13, 25], 'W': [14, 24]
     };
     
     // 🌟 自動運算所有班別的時長、起訖時間與標籤
@@ -162,19 +163,20 @@
     }
     shiftDurations['休'] = 0;
 
-    // 🌟 1. 定義單日班別底線 (AOJ=5, EY=5, F=2, W=1, 2=1)
+    // 🌟 1. 定義單日班別底線（只使用白名單班別）
     const dailyQuota = {
-        'A': 2, 'J': 2, 'O': 1, 
-        'E': 3, 'Y': 2,         
-        'F': 2, 'W': 1, '2': 1, 
-        'C': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2, 'N': 0
+        'A': 5, 'E': 5, 'F': 4, 'O': 1,
+        'W': 1, '2': 1, 'C': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2
     };
 
     // 🌟 2. 定義單日班別容載上限
     const maxDailyCapacity = {
-        'N': 2, 'C': 1, 'O': 2, 'W': 1, '2': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2,
-        'F': 4, 'A': 5, 'E': 5, 'J': 4, 'Y': 4 
+        'C': 1, 'O': 2, 'W': 1, '2': 1, 'V': 1, 'I': 1, 'R': 1, '4': 2,
+        'F': 6, 'A': 7, 'E': 7
     };
+
+    // A、E、F 為主要大量班別，分配時會依每人的既有次數做比例平衡。
+    const majorShiftCodes = ['A', 'E', 'F'];
 
     // --- DOM 元素控制 ---
     const fileUpload = document.getElementById('file-upload');
@@ -314,7 +316,11 @@
                             const code = match[1].toUpperCase();
                             if (shiftTimes[code]) {
                                 parsedShift = code;
+                            } else if (/^[0-9A-Za-z]/.test(cellVal)) {
+                                // 以英數班別開頭但不在白名單內（如 B、D、J、L、N、T、U、Y），重新排班。
+                                continue;
                             } else {
+                                // 中文假別名稱中即使包含英數字，仍視為假別保留。
                                 isLeave = true;
                             }
                         } else {
@@ -351,6 +357,62 @@
                         if (scheduleGrid[i][d] === shiftCode) count++;
                     }
                     return count;
+                };
+
+                const getDailyWorkingCount = (d) => {
+                    let count = 0;
+                    for (let p = 0; p < numPersonnel; p++) {
+                        if (scheduleGrid[p][d] !== null && scheduleGrid[p][d] !== '休') count++;
+                    }
+                    return count;
+                };
+
+                const getPersonWorkingCount = (p) => {
+                    let count = 0;
+                    for (let d = 0; d < numDays; d++) {
+                        if (scheduleGrid[p][d] !== null && scheduleGrid[p][d] !== '休') count++;
+                    }
+                    return count;
+                };
+
+                const getPersonShiftCount = (p, shiftCode) => {
+                    let count = 0;
+                    for (let d = 0; d < numDays; d++) {
+                        if (scheduleGrid[p][d] === shiftCode) count++;
+                    }
+                    return count;
+                };
+
+                // A、E 每日各 5 人、F 每日 4 人，因此用「已排次數 / 每日需求」比較進度，
+                // 讓每人的 A:E:F 次數盡量接近 5:5:4，而不是只集中在單一班別。
+                const getBalancedMajorShiftOrder = (p) => {
+                    return majorShiftCodes.slice().sort((s1, s2) => {
+                        const c1 = getPersonShiftCount(p, s1);
+                        const c2 = getPersonShiftCount(p, s2);
+                        const missingDiff = Number(c1 > 0) - Number(c2 > 0);
+                        if (missingDiff !== 0) return missingDiff;
+
+                        const progressDiff = (c1 / dailyQuota[s1]) - (c2 / dailyQuota[s2]);
+                        if (progressDiff !== 0) return progressDiff;
+                        return majorShiftCodes.indexOf(s1) - majorShiftCodes.indexOf(s2);
+                    });
+                };
+
+                const getMajorBalanceScoreFromCounts = (counts) => {
+                    const normalized = majorShiftCodes.map(s => counts[s] / dailyQuota[s]);
+                    const mean = normalized.reduce((sum, value) => sum + value, 0) / normalized.length;
+                    const variance = normalized.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0);
+                    const total = majorShiftCodes.reduce((sum, s) => sum + counts[s], 0);
+                    const missing = majorShiftCodes.filter(s => counts[s] === 0).length;
+                    return variance + (total >= 3 ? missing * 100 : 0);
+                };
+
+                // 補班優先放在人數較少的日期；減班則由人數較多的日期開始。
+                const getDaysByWorkingCount = (ascending = true) => {
+                    return Array.from({ length: numDays }, (_, d) => d).sort((a, b) => {
+                        const diff = getDailyWorkingCount(a) - getDailyWorkingCount(b);
+                        return ascending ? diff : -diff;
+                    });
                 };
 
                 const canTakeShift = (p, d, targetShift) => {
@@ -431,60 +493,7 @@
                     }
                 }
 
-                // 🌟 4.1.5 J班與休假專屬發牌 (嚴格依據休假額度)
-                let hasJ = new Array(numPersonnel).fill(0);
-                let dailyJ = new Array(numDays).fill(0);
-                
-                let leavesCount = new Array(numPersonnel).fill(0);
-                let maxL = new Array(numPersonnel).fill(0);
-                for (let p = 0; p < numPersonnel; p++) {
-                    if (kitchenIndices.includes(p)) continue;
-                    for (let d = 0; d < numDays; d++) {
-                        if (preFilledData[`${p}_${d}`] === '休') leavesCount[p]++;
-                    }
-                    maxL[p] = Math.max(targetMaxLeaves, leavesCount[p]);
-                }
-
-                // 第一階段：優先尋找「明天原本就是休假(預填)」的日子
-                for (let p = 0; p < numPersonnel; p++) {
-                    if (kitchenIndices.includes(p)) continue;
-                    for (let d = 0; d < numDays - 1; d++) {
-                        if (hasJ[p] >= 2) break; 
-                        if (scheduleGrid[p][d] === null && preFilledData[`${p}_${d+1}`] === '休') {
-                            if (dailyJ[d] < maxDailyCapacity['J'] && canTakeShift(p, d, 'J')) {
-                                scheduleGrid[p][d] = 'J';
-                                hasJ[p]++; dailyJ[d]++;
-                            }
-                        }
-                    }
-                }
-
-                // 第二階段：隨緣插入「J + 休」組合，額度不足絕不強求
-                for (let p = 0; p < numPersonnel; p++) {
-                    if (kitchenIndices.includes(p)) continue;
-                    let loops = 0;
-                    while (hasJ[p] < 2 && loops < 30) {
-                        let assigned = false;
-                        for (let d = 0; d < numDays - 1; d++) {
-                            if (scheduleGrid[p][d] === null && scheduleGrid[p][d+1] === null) {
-                                // 🛑 核心防禦：休假已滿者，不再排入新的休假
-                                if (leavesCount[p] < maxL[p]) {
-                                    if (dailyJ[d] < maxDailyCapacity['J'] && canTakeShift(p, d, 'J')) {
-                                        scheduleGrid[p][d] = 'J';
-                                        scheduleGrid[p][d+1] = '休'; 
-                                        hasJ[p]++; dailyJ[d]++; leavesCount[p]++;
-                                        assigned = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        if (!assigned) break; 
-                        loops++;
-                    }
-                }
-
-                // 4.1.6 O班全局均分發牌
+                // 4.1.5 O班全局均分發牌
                 let availableO = [];
                 let hasO = new Array(numPersonnel).fill(0);
                 
@@ -575,15 +584,41 @@
                         for (let i = 0; i < shortfall; i++) pool.push(s);
                     });
 
-                    pool.sort(() => Math.random() - 0.5);
+                    const personnelOrder = Array.from({ length: numPersonnel }, (_, p) => p)
+                        .filter(p => !kitchenIndices.includes(p) && scheduleGrid[p][d] === null)
+                        .sort((a, b) => {
+                            const workDiff = getPersonWorkingCount(a) - getPersonWorkingCount(b);
+                            if (workDiff !== 0) return workDiff;
+                            const majorDiff = majorShiftCodes.reduce((sum, s) => sum + getPersonShiftCount(a, s), 0)
+                                - majorShiftCodes.reduce((sum, s) => sum + getPersonShiftCount(b, s), 0);
+                            return majorDiff !== 0 ? majorDiff : Math.random() - 0.5;
+                        });
 
-                    for (let p = 0; p < numPersonnel; p++) {
+                    for (let p of personnelOrder) {
                         if (kitchenIndices.includes(p)) continue;
                         if (scheduleGrid[p][d] !== null) continue; 
 
                         if (pool.length > 0) {
                             let assigned = false;
-                            for (let i = 0; i < pool.length; i++) {
+                            const preferredMajorShifts = getBalancedMajorShiftOrder(p);
+                            const candidateIndexes = pool.map((_, i) => i).sort((i, j) => {
+                                const s1 = pool[i];
+                                const s2 = pool[j];
+                                const m1 = majorShiftCodes.includes(s1);
+                                const m2 = majorShiftCodes.includes(s2);
+
+                                if (m1 && m2) {
+                                    return preferredMajorShifts.indexOf(s1) - preferredMajorShifts.indexOf(s2);
+                                }
+                                if (m1 !== m2) {
+                                    const majorShift = m1 ? s1 : s2;
+                                    const isMissing = getPersonShiftCount(p, majorShift) === 0;
+                                    if (isMissing) return m1 ? -1 : 1;
+                                }
+                                return i - j;
+                            });
+
+                            for (let i of candidateIndexes) {
                                 const targetShift = pool[i];
                                 
                                 let mCount = 0;
@@ -591,10 +626,6 @@
                                 if (mCount >= 6) continue;
 
                                 if (d >= 2 && scheduleGrid[p][d-1] === targetShift && scheduleGrid[p][d-2] === targetShift) continue;
-                                if (d >= 1 && scheduleGrid[p][d-1] === 'N') {
-                                    if (!['A', 'J', 'O', '休'].includes(targetShift)) continue;
-                                }
-
                                 if (!canTakeShift(p, d, targetShift)) continue;
 
                                 scheduleGrid[p][d] = targetShift;
@@ -610,35 +641,41 @@
                 }
 
                 // 4.2.5 絕對最低底線強制補齊
-                const strictMins = { 'A': 1, 'E': 1, 'J': 1, 'Y': 1, 'F': 2 };
+                const strictMins = { 'A': 5, 'E': 5, 'F': 4 };
                 for (let d = 0; d < numDays; d++) {
                     for (let shift in strictMins) {
                         let req = strictMins[shift];
                         let loops = 0;
                         while (getDailyCount(d, shift) < req && loops < 50) {
                             let replaced = false;
-                            for (let p = 0; p < numPersonnel; p++) {
-                                if (kitchenIndices.includes(p)) continue;
-                                if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                    if (d > 0 && scheduleGrid[p][d-1] === 'J') continue; 
-                                    if (canTakeShift(p, d, shift)) {
-                                        scheduleGrid[p][d] = shift;
-                                        replaced = true;
-                                        break;
-                                    }
-                                }
+                            const eligibleLeavePersons = Array.from({ length: numPersonnel }, (_, p) => p)
+                                .filter(p => !kitchenIndices.includes(p)
+                                    && scheduleGrid[p][d] === '休'
+                                    && !preFilledData.hasOwnProperty(`${p}_${d}`)
+                                    && canTakeShift(p, d, shift))
+                                .sort((a, b) => {
+                                    const shiftDiff = getPersonShiftCount(a, shift) - getPersonShiftCount(b, shift);
+                                    if (shiftDiff !== 0) return shiftDiff;
+                                    return getPersonWorkingCount(a) - getPersonWorkingCount(b);
+                                });
+                            if (eligibleLeavePersons.length > 0) {
+                                scheduleGrid[eligibleLeavePersons[0]][d] = shift;
+                                replaced = true;
                             }
                             if (!replaced) {
-                                for (let p = 0; p < numPersonnel; p++) {
-                                    if (kitchenIndices.includes(p)) continue;
-                                    let s = scheduleGrid[p][d];
-                                    if (['N'].includes(s) && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                        if (canTakeShift(p, d, shift)) {
-                                            scheduleGrid[p][d] = shift;
-                                            replaced = true;
-                                            break;
-                                        }
-                                    }
+                                const eligibleWorkPersons = Array.from({ length: numPersonnel }, (_, p) => p)
+                                    .filter(p => {
+                                        if (kitchenIndices.includes(p)) return false;
+                                        const currentShift = scheduleGrid[p][d];
+                                        return currentShift !== null && currentShift !== '休'
+                                            && getDailyCount(d, currentShift) > (dailyQuota[currentShift] || 0)
+                                            && !preFilledData.hasOwnProperty(`${p}_${d}`)
+                                            && canTakeShift(p, d, shift);
+                                    })
+                                    .sort((a, b) => getPersonShiftCount(a, shift) - getPersonShiftCount(b, shift));
+                                if (eligibleWorkPersons.length > 0) {
+                                    scheduleGrid[eligibleWorkPersons[0]][d] = shift;
+                                    replaced = true;
                                 }
                             }
                             if (!replaced) break;
@@ -661,13 +698,11 @@
                     let loops = 0;
                     while (totalLeaves > actualMaxLeaves && loops < 100) {
                         let replaced = false;
-                        const tryShifts = ['A', 'E', 'Y', 'F', 'N'];
+                        const tryShifts = getBalancedMajorShiftOrder(p);
                         
-                        // 1. 溫和替換：遵守容載量與J班保護
-                        for (let d = 0; d < numDays; d++) {
+                        // 1. 溫和替換：優先補到當日上班人數較少的日期
+                        for (let d of getDaysByWorkingCount(true)) {
                             if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                if (d > 0 && scheduleGrid[p][d-1] === 'J') continue; 
-                                
                                 for (let s of tryShifts) {
                                     if (getDailyCount(d, s) >= (maxDailyCapacity[s] || 3)) continue;
                                     if (canTakeShift(p, d, s)) {
@@ -683,9 +718,8 @@
                         
                         // 2. 稍微強硬：無視容載量，但遵守 11 小時規定
                         if (!replaced) {
-                            for (let d = 0; d < numDays; d++) {
+                            for (let d of getDaysByWorkingCount(true)) {
                                 if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                    if (d > 0 && scheduleGrid[p][d-1] === 'J') continue; 
                                     for (let s of tryShifts) {
                                         if (canTakeShift(p, d, s)) {
                                             scheduleGrid[p][d] = s;
@@ -699,11 +733,11 @@
                             }
                         }
                         
-                        // 3. 暴力截斷：無視任何規則與J班保護，強制塞入 N 班消滅休假
+                        // 3. 最後手段：不再新增已刪除的 N/J/Y 班，仍依 A／E／F 個人次數選擇
                         if (!replaced) {
-                            for (let d = 0; d < numDays; d++) {
+                            for (let d of getDaysByWorkingCount(true)) {
                                 if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                    scheduleGrid[p][d] = 'N'; 
+                                    scheduleGrid[p][d] = getBalancedMajorShiftOrder(p)[0];
                                     totalLeaves--;
                                     replaced = true;
                                     break;
@@ -738,11 +772,9 @@
                     while (currentOt < targetOtMin && loops < 100) {
                         let replaced = false;
                         
-                        for (let d = 0; d < numDays; d++) {
+                        for (let d of getDaysByWorkingCount(true)) {
                             if (scheduleGrid[p][d] === '休' && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                if (d > 0 && scheduleGrid[p][d-1] === 'J') continue; 
-
-                                for (let s of ['A', 'E', 'F', 'Y', 'N']) {
+                                    for (let s of getBalancedMajorShiftOrder(p)) {
                                     let cap = maxDailyCapacity[s] || 3;
                                     if (loops > 20) cap += 1;
                                     if (loops > 40) cap += 2;
@@ -763,10 +795,9 @@
                             for (let d = 0; d < numDays; d++) {
                                 let s = scheduleGrid[p][d];
                                 if (s !== null && s !== '休' && shiftDurations[s] === 10 && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                    if (s === 'J') continue; 
                                     if (getDailyCount(d, s) <= (dailyQuota[s] || 0)) continue; 
 
-                                    for (let s12 of ['A', 'E', 'F', 'O', 'C']) {
+                                    for (let s12 of [...getBalancedMajorShiftOrder(p), 'O', 'C']) {
                                         let cap = maxDailyCapacity[s12] || 3;
                                         if (loops > 30) cap += 1;
                                         if (getDailyCount(d, s12) >= cap) continue;
@@ -793,10 +824,9 @@
                         for (let t = 0; t < numDays; t++) if (scheduleGrid[p][t] === '休') currentLeaves++;
                         
                         if (currentLeaves < actualMaxLeaves) {
-                            for (let d = 0; d < numDays; d++) {
+                            for (let d of getDaysByWorkingCount(false)) {
                                 let s = scheduleGrid[p][d];
                                 if (s !== null && s !== '休' && shiftDurations[s] > 8 && !preFilledData.hasOwnProperty(`${p}_${d}`)) {
-                                    if (s === 'J') continue; 
                                     if (getDailyCount(d, s) <= (dailyQuota[s] || 1)) {
                                         if (loops < 80) continue; 
                                     }
@@ -818,15 +848,15 @@
                                         if (loops < 60) continue;
                                     }
 
-                                    for (let target10H of ['N', 'Y']) { 
-                                        let cap = maxDailyCapacity[target10H] || 3;
+                                    for (let targetShortShift of ['I', 'W', '4', 'R']) { 
+                                        let cap = maxDailyCapacity[targetShortShift] || 3;
                                         if (loops > 20) cap += 1;
                                         if (loops > 40) cap += 2;
                                         
-                                        if (getDailyCount(d, target10H) >= cap) continue;
-                                        if (canTakeShift(p, d, target10H)) {
-                                            scheduleGrid[p][d] = target10H; 
-                                            currentOt -= (shiftDurations[s] - shiftDurations[target10H]);
+                                        if (getDailyCount(d, targetShortShift) >= cap) continue;
+                                        if (canTakeShift(p, d, targetShortShift)) {
+                                            scheduleGrid[p][d] = targetShortShift; 
+                                            currentOt -= (shiftDurations[s] - shiftDurations[targetShortShift]);
                                             replaced = true;
                                             break;
                                         }
@@ -875,10 +905,6 @@
                                 let sP = scheduleGrid[poorP][d];
                                 
                                 if (sR === sP) continue;
-                                if (sR === 'J' || sP === 'J') continue;
-                                if (sR === '休' && d > 0 && scheduleGrid[richP][d-1] === 'J') continue;
-                                if (sP === '休' && d > 0 && scheduleGrid[poorP][d-1] === 'J') continue;
-                                
                                 let durR = sR === '休' ? 0 : Math.max(0, shiftDurations[sR]-8);
                                 let durP = sP === '休' ? 0 : Math.max(0, shiftDurations[sP]-8);
                                 
@@ -925,14 +951,74 @@
                     swapLoops++;
                 }
 
+                // 4.6 A／E／F 班別平衡：只交換同一天的 A、E、F，
+                // 不改變每日各班人數、個人上班天數及個人加班時數。
+                let majorSwapMade = true;
+                let majorSwapLoops = 0;
+                while (majorSwapMade && majorSwapLoops < 1000) {
+                    majorSwapMade = false;
+
+                    const majorCounts = Array(numPersonnel).fill(null).map(() => ({ A: 0, E: 0, F: 0 }));
+                    for (let p = 0; p < numPersonnel; p++) {
+                        if (kitchenIndices.includes(p)) continue;
+                        for (let d = 0; d < numDays; d++) {
+                            const s = scheduleGrid[p][d];
+                            if (majorShiftCodes.includes(s)) majorCounts[p][s]++;
+                        }
+                    }
+
+                    for (let d = 0; d < numDays && !majorSwapMade; d++) {
+                        for (let p1 = 0; p1 < numPersonnel && !majorSwapMade; p1++) {
+                            if (kitchenIndices.includes(p1) || preFilledData.hasOwnProperty(`${p1}_${d}`)) continue;
+                            const s1 = scheduleGrid[p1][d];
+                            if (!majorShiftCodes.includes(s1)) continue;
+
+                            for (let p2 = p1 + 1; p2 < numPersonnel; p2++) {
+                                if (kitchenIndices.includes(p2) || preFilledData.hasOwnProperty(`${p2}_${d}`)) continue;
+                                const s2 = scheduleGrid[p2][d];
+                                if (!majorShiftCodes.includes(s2) || s1 === s2) continue;
+                                if (!canTakeShift(p1, d, s2) || !canTakeShift(p2, d, s1)) continue;
+
+                                const oldScore = getMajorBalanceScoreFromCounts(majorCounts[p1])
+                                    + getMajorBalanceScoreFromCounts(majorCounts[p2]);
+                                const next1 = { ...majorCounts[p1] };
+                                const next2 = { ...majorCounts[p2] };
+                                next1[s1]--; next1[s2]++;
+                                next2[s2]--; next2[s1]++;
+                                const newScore = getMajorBalanceScoreFromCounts(next1)
+                                    + getMajorBalanceScoreFromCounts(next2);
+
+                                if (newScore + 1e-9 >= oldScore) continue;
+
+                                scheduleGrid[p1][d] = s2;
+                                scheduleGrid[p2][d] = s1;
+                                majorCounts[p1] = next1;
+                                majorCounts[p2] = next2;
+                                majorSwapMade = true;
+                                break;
+                            }
+                        }
+                    }
+                    majorSwapLoops++;
+                }
+
                 // 5. 輸出整合
                 const dfOut = JSON.parse(JSON.stringify(excelSheetData));
-                const otColIdx = dfOut[0].length;
+                const workDaysColIdx = dfOut[0].length;
+                const leaveDaysColIdx = workDaysColIdx + 1;
+                const otColIdx = workDaysColIdx + 2;
+
+                dfOut[0][workDaysColIdx] = "當月上班天數";
+                dfOut[1][workDaysColIdx] = "總班數";
+                dfOut[0][leaveDaysColIdx] = "當月休假天數";
+                dfOut[1][leaveDaysColIdx] = "總休假";
                 dfOut[0][otColIdx] = "當月加班時數";
                 dfOut[1][otColIdx] = "總計";
 
                 for (let p = 0; p < numPersonnel; p++) {
                     const rIdx = startRow + p;
+                    let totalWorkDays = 0;
+                    let totalLeaveDays = 0;
                     let totalOt = 0;
 
                     for (let d = 0; d < numDays; d++) {
@@ -952,11 +1038,25 @@
                         }
 
                         const finalShift = kitchenIndices.includes(p) ? (preFilledData[`${p}_${d}`] || '休') : s;
-                        if (finalShift !== '休') {
+                        if (kitchenIndices.includes(p)) {
+                            // 廚房不參與自動排班，只統計原本有填寫的班或假；空白不計入休假。
+                            if (preFilledData.hasOwnProperty(`${p}_${d}`)) {
+                                if (finalShift === '休') totalLeaveDays++;
+                                else totalWorkDays++;
+                            }
+                        } else if (finalShift === '休') {
+                            totalLeaveDays++;
+                        } else if (finalShift !== null) {
+                            totalWorkDays++;
+                        }
+
+                        if (finalShift !== '休' && finalShift !== null) {
                             const duration = shiftDurations[finalShift] || 0;
                             if (duration > 8) totalOt += (duration - 8);
                         }
                     }
+                    dfOut[rIdx][workDaysColIdx] = totalWorkDays;
+                    dfOut[rIdx][leaveDaysColIdx] = totalLeaveDays;
                     dfOut[rIdx][otColIdx] = String(totalOt);
                 }
 
@@ -992,9 +1092,12 @@
                         const disp = includeTime ? (shiftLabels[baseCode] || baseCode) : baseCode;
                         summaryList.push(`${disp}: ${dailyCounts[baseCode]}`);
                     });
+
+                    const dailyWorkingTotal = Object.values(dailyCounts).reduce((sum, count) => sum + count, 0);
+                    const dailySummary = `上班合計：${dailyWorkingTotal} 人`;
                     
-                    dfOut[summaryRowIdx][cIdx] = summaryList.join("\n");
-                    statsOutputText += `【${dateHeader}】 ${summaryList.join('、 ')}\n`;
+                    dfOut[summaryRowIdx][cIdx] = [dailySummary, ...summaryList].join("\n");
+                    statsOutputText += `【${dateHeader}】${dailySummary}｜${summaryList.join('、 ')}\n`;
                 }
 
                 statsDisplay.textContent = statsOutputText;
